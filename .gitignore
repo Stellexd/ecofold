@@ -1,0 +1,56 @@
+# Binarios compilados de Go
+bin/
+dist/
+build/bin/
+/ecofold-daemon
+/ecofold-gui
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Archivos de test y cobertura de Go
+*.test
+*.out
+coverage.txt
+
+# Dependencias de Frontend (para cuando agreguemos Wails)
+frontend/node_modules/
+frontend/dist/
+
+# Basura de Sistemas Operativos (macOS y Linux)
+.DS_Store
+.AppleDouble
+.LSOverride
+*~
+.directory
+
+# IDEs y Editores (VS Code / JetBrains)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Paquetes de Arch Linux / CachyOS (cuando armes el AUR)
+pkg/
+src/
+*.pkg.tar.zst
+
+# Variables de entorno o configuraciones locales de prueba
+.env
+config.local.json
+
+# Configuración local de Agentes de IA y Skills
+AGENTS.md
+CLAUDE.md
+.agents/
+.opencode/
+opencode.json
+.skills/
+skills/
+.cursor/
+.cursorrules
+.windsurfrules
+.github/copilot-instructions.md
+.claude/
+repomix-output.xml
