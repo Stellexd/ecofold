@@ -107,7 +107,7 @@ All power values below are in milliwatts (mW); current is in milliamps (mA).
 | `PowerTelemetryData.SystemCurrentIn` | Reported as `0` in all measured captures; do not use it as an input-current signal. |
 | `PowerDistribution.IPDInputPower` | Wall/adaptor input power in mW; the most reliable adapter-input measurement in the captures. It is `0` on battery. |
 
-The stale-input behavior is material: shortly after a 30 W adapter was connected, `SystemPowerIn` was observed at just `16 mW`, yielding a misleading net flow. In a stable charging sample, `BatteryPower` was `23,537 mW`, `SystemLoad` was `4,674 mW`, and `SystemPowerIn` was `28,211 mW`. With an adapter attached, `AdapterDetails` included `Name = "30W USB-C Power Adapter"`, `Watts = 30`, `AdapterVoltage = 20000 mV`, `Current = 1490 mA`, and `IsWireless = false`.
+The stale-input behavior is material: shortly after a 30 W adapter was connected, `SystemPowerIn` was observed at just `16 mW`, yielding a misleading net flow. In a stable charging sample, `PowerTelemetryData.BatteryPower` was `23,537 mW`, `PowerTelemetryData.SystemLoad` was `4,674 mW`, and `PowerTelemetryData.SystemPowerIn` was `28,211 mW`. With an adapter attached, `AdapterDetails` included `Name = "30W USB-C Power Adapter"`, `Watts = 30`, `AdapterVoltage = 20000 mV`, `Current = 1490 mA`, and `IsWireless = false`.
 
 ## Example measurement snapshots
 

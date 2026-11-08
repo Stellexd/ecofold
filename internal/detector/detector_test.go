@@ -331,6 +331,15 @@ func FuzzEvaluateNeverPanics(f *testing.F) {
 	})
 }
 
+// TestGPUMemRequiresUtilPctIsClampedTo25 verifies that values below the
+// safety floor (including 1) are clamped to 25.
+func TestGPUMemRequiresUtilPctIsClampedTo25(t *testing.T) {
+	ev := NewEvaluator(Config{GPUUtilThresholdPct: 45, GPUMemRequiresUtilPct: 1})
+	if ev.cfg.GPUMemRequiresUtilPct != 25 {
+		t.Errorf("GPUMemRequiresUtilPct = %d, se esperaba 25", ev.cfg.GPUMemRequiresUtilPct)
+	}
+}
+
 // TestConfigExtremesAreClampedAndEvaluable covers absurd or hostile
 // configurations (negative, zero) to confirm that NewEvaluator never produces
 // an unusable evaluator or panics.

@@ -41,7 +41,7 @@ Battery-power fallback: `round((Voltage_mV * InstantAmperage_mA) / 1000.0)`.
   `pmset -g therm` only reports historical events and `powermetrics` requires root:
   temperature is **unavailable** to the unprivileged GUI process.
 - `ChargerCount` / `ChargerData` are not reliable AC signals (they appear without an adapter).
-- Idle GPU utilization ≈ 24%: do not use absolute GPU thresholds.
+- Idle GPU utilization ≈ 24%: do not use idle-level GPU thresholds.
 - `AppleRawMaxCapacity` recalibrates over minutes (4493 → 4516 mAh): battery
   health is a noisy estimate.
 

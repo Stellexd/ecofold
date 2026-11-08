@@ -40,7 +40,10 @@ type GPUMetrics struct {
 type ioregBatteryArray []ioregBatteryNode
 
 type ioregBatteryNode struct {
-	ExternalConnected bool   `plist:"ExternalConnected"`
+	// ExternalConnected is decoded as a pointer so we can distinguish "key
+	// present and false" from "key absent". AC presence follows the key when
+	// it exists; WallInput is only used as a fallback.
+	ExternalConnected *bool  `plist:"ExternalConnected"`
 	IsCharging        bool   `plist:"IsCharging"`
 	CurrentCapacity   int    `plist:"CurrentCapacity"`
 	Voltage           int    `plist:"Voltage"`
@@ -119,7 +122,12 @@ func ParseSmartBatteryPlist(raw []byte) (BatteryMetrics, error) {
 		wallInput = int64(*n.PowerDistribution.IPDInputPower)
 	}
 
-	onAC := n.ExternalConnected || wallInput > 0
+	var onAC bool
+	if n.ExternalConnected != nil {
+		onAC = *n.ExternalConnected
+	} else {
+		onAC = wallInput > 0
+	}
 	isCharging := n.IsCharging || instantAmperage > 0
 
 	var timeRemaining *int

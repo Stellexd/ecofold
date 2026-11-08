@@ -31,16 +31,18 @@ const (
 // are documented and can be obtained with DefaultConfig.
 type Config struct {
 	// MinBatteryPct is the minimum battery percentage required to continue folding
-	// on battery. Default: 50.
+	// on battery. Default: 50. Warning: constructing Config{AllowBatteryFolding:
+	// true} without starting from DefaultConfig leaves this field at 0%, disabling
+	// the battery reserve.
 	MinBatteryPct int
 
 	// AllowBatteryFolding indicates whether folding on battery is allowed. Default:
 	// true.
 	AllowBatteryFolding bool
 
-	// GPUUtilThresholdPct is the GPU utilization threshold (%). Reaching it for
-	// the configured number of ticks counts as game load. Default: 45. The
-	// evaluator rejects values less than or equal to 25.
+	// GPUUtilThresholdPct is the GPU utilization threshold (%). Meeting or
+	// exceeding it for the configured number of ticks counts as game load.
+	// Default: 45. The evaluator rejects values less than or equal to 25.
 	GPUUtilThresholdPct int
 
 	// GPUMemThresholdMiB is the in-use GPU memory threshold (MiB). It only counts
@@ -135,8 +137,9 @@ type Evaluator struct {
 // NewEvaluator creates an evaluator with the given configuration. Invalid or
 // overly conservative values are clamped to defaults: GPUUtilThresholdPct <= 25
 // is forced to 45; GPUMemThresholdMiB <= 0 is forced to 1500;
-// SustainedTicksRequired <= 0 is forced to 3; GPUMemRequiresUtilPct <= 0 is
-// forced to 25; MinBatteryPct < 0 is forced to 50.
+// SustainedTicksRequired <= 0 is forced to 3; GPUMemRequiresUtilPct below 25 or
+// greater than GPUUtilThresholdPct is forced to 25 (never below 25);
+// MinBatteryPct < 0 is forced to 50.
 //
 // AllowBatteryFolding's zero value (false) is intentional and conservative: a
 // Config{} never folds on battery; callers that want true must start from
@@ -151,7 +154,7 @@ func NewEvaluator(cfg Config) *Evaluator {
 	if cfg.SustainedTicksRequired <= 0 {
 		cfg.SustainedTicksRequired = DefaultConfig().SustainedTicksRequired
 	}
-	if cfg.GPUMemRequiresUtilPct <= 0 {
+	if cfg.GPUMemRequiresUtilPct < 25 || cfg.GPUMemRequiresUtilPct > cfg.GPUUtilThresholdPct {
 		cfg.GPUMemRequiresUtilPct = DefaultConfig().GPUMemRequiresUtilPct
 	}
 	if cfg.MinBatteryPct < 0 {
@@ -164,10 +167,11 @@ func NewEvaluator(cfg Config) *Evaluator {
 // priority logic is:
 //
 //  1. Sustained GPU game load → StatePausedLoad.
-//     Load is detected if overall utilization meets the threshold, or if
-//     in-use memory meets its threshold AND overall utilization reaches at
-//     least GPUMemRequiresUtilPct. This avoids false positives from occupied
-//     unified memory while the GPU is idle.
+//     Load is detected if overall utilization meets or exceeds the
+//     threshold, or if in-use memory meets or exceeds its threshold AND
+//     overall utilization meets or exceeds GPUMemRequiresUtilPct. This
+//     avoids false positives from occupied unified memory while the GPU is
+//     idle.
 //  2. Low battery or battery folding disabled → StatePausedBattery.
 //  3. On battery with sufficient charge and folding allowed → StateFoldingEco.
 //  4. Any other case → StateFolding.

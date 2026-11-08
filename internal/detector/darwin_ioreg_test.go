@@ -96,6 +96,41 @@ func TestParseDischargingFixture(t *testing.T) {
 	}
 }
 
+// batteryExternalFalseWithWallInput simulates a battery plist where
+// ExternalConnected is explicitly false while the adapter still reports a
+// positive IPDInputPower. OnAC must follow ExternalConnected, not WallInput.
+const batteryExternalFalseWithWallInput = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>ExternalConnected</key>
+    <false/>
+    <key>PowerDistribution</key>
+    <dict>
+      <key>IPDInputPower</key>
+      <integer>10000</integer>
+    </dict>
+  </dict>
+</array>
+</plist>`
+
+// TestExternalConnectedFalseOverridesWallInput verifies that AC presence is
+// driven by ExternalConnected when the key is present, even if the adapter
+// reports positive input power.
+func TestExternalConnectedFalseOverridesWallInput(t *testing.T) {
+	got, err := ParseSmartBatteryPlist([]byte(batteryExternalFalseWithWallInput))
+	if err != nil {
+		t.Fatalf("ParseSmartBatteryPlist(ExternalConnected=false, wall>0) devolvió error: %v", err)
+	}
+	if got.WallInputMW != 10000 {
+		t.Errorf("WallInputMW = %d, se esperaba 10000", got.WallInputMW)
+	}
+	if got.OnAC {
+		t.Errorf("OnAC = true, se esperaba false (ExternalConnected debe prevalecer sobre WallInput)")
+	}
+}
+
 // TestParseGPUIdleFixture validates generic IOAccelerator parsing and
 // conversion from bytes to MiB.
 func TestParseGPUIdleFixture(t *testing.T) {

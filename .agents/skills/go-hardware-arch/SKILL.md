@@ -16,8 +16,9 @@ When writing or modifying hardware, GPU, or process detection code, enforce thes
 
 3. **Hybrid Game Detection (`internal/detector`):**
    - Never execute `nvidia-smi` or shell subcommands in a polling loop.
-   - Layer 1: Poll `nvmlDeviceGetGraphicsRunningProcesses` every 1.5–2s. Trigger `StateGaming` if non-ignored processes exceed the VRAM threshold (default >800 MiB).
+   - Layer 1: Poll `nvmlDeviceGetGraphicsRunningProcesses` every 1.5–2s. Trigger `StatePausedLoad` if non-ignored processes exceed the VRAM threshold (`GPUMemThresholdMiB` = 1500 MiB, rule `>=`) and utilization meets or exceeds `GPUMemRequiresUtilPct` (25%).
    - Layer 2: Detect active Wine/Proton (`wineserver`, `reaper`, `.exe` payloads like `deadlock.exe`) and apply a configurable exit cooldown (2–3 minutes) before restoring folding state.
+   - *Status:* The Linux NVML-based detection layers are pending implementation; the architecture supports them, but the current repository focuses on the macOS mock path.
 
 4. **macOS Apple Silicon Telemetry & Detection (`//go:build darwin`):**
    - It is permitted to call `ioreg -a -r -d 1 -c AppleSmartBattery` and `ioreg -a -r -d 1 -c IOAccelerator` **only during initialization or one-shot refresh**, not in a tight polling loop.

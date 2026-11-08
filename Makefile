@@ -1,4 +1,4 @@
-.PHONY: all build build-daemon build-gui run-daemon clean test
+.PHONY: all build build-daemon build-gui build-linux run-daemon clean test
 
 BINARY_DAEMON=bin/ecofold-daemon
 BINARY_GUI=bin/ecofold-gui
@@ -15,6 +15,10 @@ build-gui:
 	@echo "🔨 Compilando ecofold-gui..."
 	go build -o $(BINARY_GUI) ./cmd/ecofold-gui
 
+build-linux:
+	@echo "🔨 Cross-compilando para Linux..."
+	GOOS=linux go build ./...
+
 run-daemon: build-daemon
 	@if [ "$$(uname)" = "Linux" ]; then \
 		echo "🚀 Corriendo daemon en Linux (requiere sudo para NVML)..."; \
@@ -25,7 +29,7 @@ run-daemon: build-daemon
 	fi
 
 test:
-	go test -v ./...
+	go test -race -v ./...
 
 clean:
 	rm -rf bin/
