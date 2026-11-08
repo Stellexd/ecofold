@@ -16,7 +16,13 @@ build-gui:
 	go build -o $(BINARY_GUI) ./cmd/ecofold-gui
 
 run-daemon: build-daemon
-	@if [ "$$(uname)" = "Linux" ]; then \n		echo "🚀 Corriendo daemon en Linux (requiere sudo para NVML)..."; \n		sudo ./$(BINARY_DAEMON); \n	else \n		echo "🍎 Corriendo daemon en macOS (Modo Simulador/Mock)..."; \n		./$(BINARY_DAEMON); \n	fi
+	@if [ "$$(uname)" = "Linux" ]; then \
+		echo "🚀 Corriendo daemon en Linux (requiere sudo para NVML)..."; \
+		sudo ./$(BINARY_DAEMON); \
+	else \
+		echo "🍎 Corriendo daemon en macOS (Modo Simulador/Mock)..."; \
+		./$(BINARY_DAEMON); \
+	fi
 
 test:
 	go test -v ./...

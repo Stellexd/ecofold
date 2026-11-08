@@ -40,6 +40,9 @@ src/
 .env
 config.local.json
 
+# Scripts locales de desarrollo y utilidades de análisis
+scripts/
+
 # Configuración local de Agentes de IA y Skills
 AGENTS.md
 CLAUDE.md
@@ -54,3 +57,15 @@ skills/
 .github/copilot-instructions.md
 .claude/
 repomix-output.xml
+
+# Bases de datos locales de telemetría (SQLite)
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+
+# Telemetría local y caché de Python
+mac_telemetry.db
+__pycache__/
+*.pyc
