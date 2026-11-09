@@ -49,6 +49,19 @@ func validatePowerLimit(watts, lo, hi int) error {
 	return nil
 }
 
+// clampMW limits mw to the inclusive [lo, hi] range. It is used when restoring
+// the default power limit: NVML may report a default outside the current
+// constraints, and restoring must still apply the closest allowed value.
+func clampMW(mw, lo, hi uint32) uint32 {
+	if mw < lo {
+		return lo
+	}
+	if mw > hi {
+		return hi
+	}
+	return mw
+}
+
 // mwToW converts milliwatts to watts using integer division.
 func mwToW(mw uint32) int {
 	return int(mw / 1000)

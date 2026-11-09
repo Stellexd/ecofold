@@ -16,8 +16,10 @@ build-gui:
 	go build -o $(BINARY_GUI) ./cmd/ecofold-gui
 
 build-linux:
-	@echo "🔨 Cross-compilando para Linux..."
-	GOOS=linux go build ./...
+	@echo "🔨 Cross-compilando para Linux (solo verificación de compilación)..."
+	@echo "⚠️  CGO_ENABLED=0: se compila internal/gpu/stub_linux.go, SIN control de TDP."
+	@echo "   Para el binario real, compila en Linux con CGO_ENABLED=1 (make build)."
+	CGO_ENABLED=0 GOOS=linux go build ./...
 
 run-daemon: build-daemon
 	@if [ "$$(uname)" = "Linux" ]; then \

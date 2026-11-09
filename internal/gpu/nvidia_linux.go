@@ -132,7 +132,9 @@ func (p *NvidiaProvider) SetPowerLimit(watts int) error {
 	return nil
 }
 
-// RestoreDefaultPowerLimit resets the power limit to the device's default.
+// RestoreDefaultPowerLimit resets the power limit to the device's default,
+// clamped to the current constraints so the restore never fails on a value
+// NVML would reject.
 func (p *NvidiaProvider) RestoreDefaultPowerLimit() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -144,7 +146,14 @@ func (p *NvidiaProvider) RestoreDefaultPowerLimit() error {
 	if ret != nvml.SUCCESS {
 		return fmtError("GetPowerManagementDefaultLimit", ret)
 	}
-	ret = p.device.SetPowerManagementLimit(defaultLimit)
+	minLimit, maxLimit, ret := p.device.GetPowerManagementLimitConstraints()
+	if ret != nvml.SUCCESS {
+		return fmtError("GetPowerManagementLimitConstraints", ret)
+	}
+	if minLimit > maxLimit || maxLimit == 0 {
+		return fmt.Errorf("invalid power limit constraints [%dmW, %dmW]", minLimit, maxLimit)
+	}
+	ret = p.device.SetPowerManagementLimit(clampMW(defaultLimit, minLimit, maxLimit))
 	if ret != nvml.SUCCESS {
 		return fmtError("SetPowerManagementLimit", ret)
 	}

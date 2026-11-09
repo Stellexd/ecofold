@@ -44,7 +44,8 @@ type Config struct {
 
 	// GPUUtilThresholdPct is the GPU utilization threshold (%). Meeting or
 	// exceeding it for the configured number of ticks counts as game load.
-	// Default: 45. The evaluator rejects values less than or equal to 25.
+	// Default: 45. The evaluator rejects values less than or equal to 25 or
+	// greater than 100.
 	GPUUtilThresholdPct int
 
 	// GPUMemThresholdMiB is the in-use GPU memory threshold (MiB). It only counts
@@ -57,9 +58,15 @@ type Config struct {
 	GPUMemRequiresUtilPct int
 
 	// SustainedTicksRequired is the number of consecutive high-load measurements
-	// required to declare StatePausedLoad. Default: 3.
+	// required to declare StatePausedLoad. Default: 3. The evaluator rejects
+	// values less than or equal to 0 or greater than 60.
 	SustainedTicksRequired int
 }
+
+// maxSustainedTicksRequired bounds SustainedTicksRequired. At one evaluation
+// per second it is one minute of sustained load; larger values would make the
+// pause effectively unreachable.
+const maxSustainedTicksRequired = 60
 
 // DefaultConfig returns the configuration with the documented default values.
 func DefaultConfig() Config {
@@ -141,8 +148,9 @@ type Evaluator struct {
 
 // NewEvaluator creates an evaluator with the given configuration. Invalid or
 // overly conservative values are clamped to defaults: GPUUtilThresholdPct <= 25
-// is forced to 45; GPUMemThresholdMiB <= 0 is forced to 1500;
-// SustainedTicksRequired <= 0 is forced to 3; GPUMemRequiresUtilPct below 25 or
+// or > 100 is forced to 45 (a threshold above 100% could never be reached and
+// would disable load pausing); GPUMemThresholdMiB <= 0 is forced to 1500;
+// SustainedTicksRequired <= 0 or > 60 is forced to 3; GPUMemRequiresUtilPct below 25 or
 // greater than GPUUtilThresholdPct is forced to 25 (never below 25);
 // MinBatteryPct < 0 is forced to 50.
 //
@@ -150,13 +158,13 @@ type Evaluator struct {
 // Config{} never folds on battery; callers that want true must start from
 // DefaultConfig().
 func NewEvaluator(cfg Config) *Evaluator {
-	if cfg.GPUUtilThresholdPct <= 25 {
+	if cfg.GPUUtilThresholdPct <= 25 || cfg.GPUUtilThresholdPct > 100 {
 		cfg.GPUUtilThresholdPct = DefaultConfig().GPUUtilThresholdPct
 	}
 	if cfg.GPUMemThresholdMiB <= 0 {
 		cfg.GPUMemThresholdMiB = DefaultConfig().GPUMemThresholdMiB
 	}
-	if cfg.SustainedTicksRequired <= 0 {
+	if cfg.SustainedTicksRequired <= 0 || cfg.SustainedTicksRequired > maxSustainedTicksRequired {
 		cfg.SustainedTicksRequired = DefaultConfig().SustainedTicksRequired
 	}
 	if cfg.GPUMemRequiresUtilPct < 25 || cfg.GPUMemRequiresUtilPct > cfg.GPUUtilThresholdPct {

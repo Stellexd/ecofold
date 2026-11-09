@@ -5,6 +5,7 @@ package detector
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 )
@@ -467,5 +468,29 @@ func TestConfigExtremesAreClampedAndEvaluable(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestGPUUtilThresholdAbove100IsClamped verifies that an unreachable threshold
+// is replaced by the default instead of disabling load pausing (M5).
+func TestGPUUtilThresholdAbove100IsClamped(t *testing.T) {
+	for _, pct := range []int{101, 1000, math.MaxInt} {
+		ev := NewEvaluator(Config{GPUUtilThresholdPct: pct})
+		if ev.cfg.GPUUtilThresholdPct != DefaultConfig().GPUUtilThresholdPct {
+			t.Errorf("GPUUtilThresholdPct(%d) = %d, se esperaba %d", pct, ev.cfg.GPUUtilThresholdPct, DefaultConfig().GPUUtilThresholdPct)
+		}
+
+		var got OperatingState
+		for range ev.cfg.SustainedTicksRequired {
+			got = ev.Evaluate(SystemSnapshot{OnAC: true, GPUDeviceUtilPct: 100})
+		}
+		if got != StatePausedLoad {
+			t.Errorf("con GPUUtilThresholdPct=%d y 100%% de uso sostenido, estado = %q, se esperaba %q", pct, got, StatePausedLoad)
+		}
+	}
+
+	ev := NewEvaluator(Config{GPUUtilThresholdPct: 100})
+	if ev.cfg.GPUUtilThresholdPct != 100 {
+		t.Errorf("GPUUtilThresholdPct(100) = %d, se esperaba 100 (límite válido)", ev.cfg.GPUUtilThresholdPct)
 	}
 }

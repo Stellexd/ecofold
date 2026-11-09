@@ -142,3 +142,28 @@ func TestBytesToMiBHandlesNVMLUnavailableSentinel(t *testing.T) {
 		})
 	}
 }
+
+// TestClampMW verifies the clamp used by RestoreDefaultPowerLimit (M2).
+func TestClampMW(t *testing.T) {
+	tests := []struct {
+		name       string
+		mw, lo, hi uint32
+		want       uint32
+	}{
+		{"inside", 130000, 123000, 145000, 130000},
+		{"at_min", 123000, 123000, 145000, 123000},
+		{"at_max", 145000, 123000, 145000, 145000},
+		{"below_min", 100000, 123000, 145000, 123000},
+		{"above_max", 200000, 123000, 145000, 145000},
+		{"zero", 0, 123000, 145000, 123000},
+		{"max_uint32", math.MaxUint32, 123000, 145000, 145000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clampMW(tt.mw, tt.lo, tt.hi); got != tt.want {
+				t.Errorf("clampMW(%d, %d, %d) = %d, want %d", tt.mw, tt.lo, tt.hi, got, tt.want)
+			}
+		})
+	}
+}
