@@ -3,6 +3,7 @@
 package detector
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -220,6 +221,83 @@ func TestDesktopMacWithoutBattery(t *testing.T) {
 	if state != StateFolding {
 		t.Fatalf("Evaluate = %q, se esperaba %q en un equipo sin batería", state, StateFolding)
 	}
+}
+
+// TestParseRejectsOversizedInput feeds both parsers a buffer one byte above
+// maxPlistBytes (16 MiB). The size guard must reject it before handing the data
+// to the plist decoder, returning an error and never panicking (a hostile or
+// corrupted ioreg output must not be able to exhaust memory or crash the
+// daemon).
+func TestParseRejectsOversizedInput(t *testing.T) {
+	oversized := make([]byte, maxPlistBytes+1)
+	// Content is irrelevant: the length check must trigger first. A plausible
+	// XML preamble documents the intent of the input.
+	copy(oversized, `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><array/></plist>`)
+
+	t.Run("ParseSmartBatteryPlist", func(t *testing.T) {
+		got, err := ParseSmartBatteryPlist(oversized)
+		if err == nil {
+			t.Fatalf("ParseSmartBatteryPlist(%d bytes) devolvió nil error, se esperaba rechazo por tamaño", len(oversized))
+		}
+		if got != (BatteryMetrics{}) {
+			t.Errorf("ParseSmartBatteryPlist devolvió métricas parciales con entrada sobredimensionada: %+v", got)
+		}
+	})
+
+	t.Run("ParseIOAcceleratorPlist", func(t *testing.T) {
+		got, err := ParseIOAcceleratorPlist(oversized)
+		if err == nil {
+			t.Fatalf("ParseIOAcceleratorPlist(%d bytes) devolvió nil error, se esperaba rechazo por tamaño", len(oversized))
+		}
+		if got != (GPUMetrics{}) {
+			t.Errorf("ParseIOAcceleratorPlist devolvió métricas parciales con entrada sobredimensionada: %+v", got)
+		}
+	})
+}
+
+// TestRoundedMWNoOverflow verifies the float64-based power calculation against
+// extreme operands (math.MaxInt32 mV * math.MaxInt64 mA). The int64 product
+// would overflow; the float64 path must neither panic nor wrap into a negative
+// value.
+//
+// NOTE: Go leaves float64 -> int64 conversion out of range implementation-
+// specific. On darwin/arm64 (FCVTZS) it saturates to math.MaxInt64, so the sign
+// assertion below holds on this platform; on amd64 the same conversion yields
+// math.MinInt64. See the QA report for the cross-platform implication.
+func TestRoundedMWNoOverflow(t *testing.T) {
+	t.Run("extreme positive operands do not wrap", func(t *testing.T) {
+		var got int64
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("roundedMW(math.MaxInt32, math.MaxInt64) entró en panic: %v", r)
+				}
+			}()
+			got = roundedMW(math.MaxInt32, math.MaxInt64)
+		}()
+
+		if got < 0 {
+			t.Fatalf("roundedMW(math.MaxInt32, math.MaxInt64) = %d (negativo): la conversión float64->int64 desbordó/hizo wrap", got)
+		}
+	})
+
+	t.Run("negative amperage keeps sign (11400mV * -360mA)", func(t *testing.T) {
+		var got int64
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("roundedMW(11400, -360) entró en panic: %v", r)
+				}
+			}()
+			got = roundedMW(11400, -360)
+		}()
+
+		// 11400 * -360 / 1000 = -4104 exactly.
+		const want = int64(-4104)
+		if diff := got - want; diff < -1 || diff > 1 {
+			t.Fatalf("roundedMW(11400, -360) = %d, se esperaba %d (±1)", got, want)
+		}
+	})
 }
 
 // FuzzBuildSnapshotFromPlists subjects the plist parser to arbitrary and

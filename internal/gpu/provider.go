@@ -67,7 +67,11 @@ func wToMW(w int) (uint32, error) {
 	return uint32(w * 1000), nil
 }
 
-// bytesToMiB converts bytes to mebibytes using integer division.
+// bytesToMiB converts bytes to mebibytes using integer division. If the NVML
+// unavailable sentinel (math.MaxUint64) is passed, it returns 0.
 func bytesToMiB(b uint64) uint64 {
+	if b == math.MaxUint64 {
+		return 0
+	}
 	return b / 1024 / 1024
 }

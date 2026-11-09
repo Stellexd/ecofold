@@ -4,17 +4,22 @@ package gpu
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
 // NvidiaProvider uses the NVIDIA NVML library to manage a single GPU (index 0).
 type NvidiaProvider struct {
+	mu     sync.Mutex
 	device nvml.Device
 }
 
 // Init initializes NVML and opens GPU handle 0.
 func (p *NvidiaProvider) Init() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {
 		return fmtError("nvml.Init", ret)
@@ -31,7 +36,11 @@ func (p *NvidiaProvider) Init() error {
 
 // Shutdown releases NVML resources.
 func (p *NvidiaProvider) Shutdown() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	ret := nvml.Shutdown()
+	p.device = nil
 	if ret != nvml.SUCCESS {
 		return fmtError("nvml.Shutdown", ret)
 	}
@@ -40,6 +49,9 @@ func (p *NvidiaProvider) Shutdown() error {
 
 // GetTelemetry reads the current GPU telemetry snapshot.
 func (p *NvidiaProvider) GetTelemetry() (Telemetry, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	var t Telemetry
 	if p.device == nil {
 		return t, fmt.Errorf("gpu: provider not initialized")
@@ -96,6 +108,9 @@ func (p *NvidiaProvider) GetTelemetry() (Telemetry, error) {
 
 // SetPowerLimit validates the requested wattage and applies it via NVML (mW).
 func (p *NvidiaProvider) SetPowerLimit(watts int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.device == nil {
 		return fmt.Errorf("gpu: provider not initialized")
 	}
@@ -119,6 +134,9 @@ func (p *NvidiaProvider) SetPowerLimit(watts int) error {
 
 // RestoreDefaultPowerLimit resets the power limit to the device's default.
 func (p *NvidiaProvider) RestoreDefaultPowerLimit() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.device == nil {
 		return fmt.Errorf("gpu: provider not initialized")
 	}
@@ -135,6 +153,9 @@ func (p *NvidiaProvider) RestoreDefaultPowerLimit() error {
 
 // GetGraphicsProcesses returns the list of graphics processes running on the GPU.
 func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.device == nil {
 		return nil, fmt.Errorf("gpu: provider not initialized")
 	}

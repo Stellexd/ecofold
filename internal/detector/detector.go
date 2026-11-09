@@ -5,6 +5,8 @@
 // between Linux and macOS, while telemetry collection is separated by build tags.
 package detector
 
+import "sync"
+
 // OperatingState represents the control decision EcoFold should apply.
 type OperatingState string
 
@@ -129,7 +131,10 @@ type SystemSnapshot struct {
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
 // not make system calls; it only applies business logic.
+//
+// An Evaluator is safe for concurrent use by multiple goroutines.
 type Evaluator struct {
+	mu             sync.Mutex
 	highLoadStreak int
 	cfg            Config
 }
@@ -175,13 +180,20 @@ func NewEvaluator(cfg Config) *Evaluator {
 //  2. Low battery or battery folding disabled → StatePausedBattery.
 //  3. On battery with sufficient charge and folding allowed → StateFoldingEco.
 //  4. Any other case → StateFolding.
+//
+// Evaluate is safe for concurrent use by multiple goroutines.
 func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	isHighLoad := s.GPUDeviceUtilPct >= e.cfg.GPUUtilThresholdPct ||
 		(s.GPUInUseMemMiB >= e.cfg.GPUMemThresholdMiB &&
 			s.GPUDeviceUtilPct >= e.cfg.GPUMemRequiresUtilPct)
 
 	if isHighLoad {
-		e.highLoadStreak++
+		if e.highLoadStreak < e.cfg.SustainedTicksRequired {
+			e.highLoadStreak++
+		}
 	} else {
 		e.highLoadStreak = 0
 	}

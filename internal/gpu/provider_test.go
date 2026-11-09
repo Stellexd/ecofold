@@ -118,3 +118,27 @@ func TestBytesToMiB(t *testing.T) {
 		}
 	}
 }
+
+// TestBytesToMiBHandlesNVMLUnavailableSentinel covers the NVML convention where
+// math.MaxUint64 means "value not available" (for example memory info on an
+// unsupported device). It must map to 0 MiB instead of a gigantic bogus value
+// that would overflow int on 32-bit builds or poison telemetry thresholds.
+func TestBytesToMiBHandlesNVMLUnavailableSentinel(t *testing.T) {
+	cases := []struct {
+		name  string
+		bytes uint64
+		want  uint64
+	}{
+		{name: "NVML unavailable sentinel (MaxUint64)", bytes: math.MaxUint64, want: 0},
+		{name: "fixture 704217088 bytes (671.59 MiB)", bytes: 704217088, want: 671},
+		{name: "zero bytes", bytes: 0, want: 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := bytesToMiB(tc.bytes); got != tc.want {
+				t.Fatalf("bytesToMiB(%d) = %d, se esperaba %d", tc.bytes, got, tc.want)
+			}
+		})
+	}
+}

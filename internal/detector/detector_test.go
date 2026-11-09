@@ -237,7 +237,7 @@ func TestEvaluateBoundaries(t *testing.T) {
 		{
 			name: "batería al 100% a batería permite plegado eco",
 			snap: SystemSnapshot{HasBattery: true, OnAC: false, BatteryPct: 100, GPUDeviceUtilPct: 0},
-				want: StateFoldingEco, // DefaultConfig has AllowBatteryFolding=true
+			want: StateFoldingEco, // DefaultConfig has AllowBatteryFolding=true
 		},
 	}
 
@@ -291,6 +291,107 @@ func TestEvaluatorInstancesAreIndependentInParallel(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// TestSharedEvaluatorConcurrentAccess hammers a single Evaluator instance from
+// 32 goroutines, each emitting 100 ticks that alternate between sustained
+// high-load and idle snapshots. Evaluate must be safe for concurrent use (the
+// daemon may share one evaluator across clients) and every returned state must
+// belong to the closed set. Run with -race.
+func TestSharedEvaluatorConcurrentAccess(t *testing.T) {
+	const workers = 32
+	const ticks = 100
+
+	valid := map[OperatingState]bool{
+		StateFolding:       true,
+		StateFoldingEco:    true,
+		StatePausedBattery: true,
+		StatePausedLoad:    true,
+	}
+
+	ev := NewEvaluator(DefaultConfig())
+
+	highLoad := SystemSnapshot{
+		HasBattery:       false,
+		OnAC:             true,
+		GPUClass:         "AGXAcceleratorG16G",
+		GPUDeviceUtilPct: 60,
+		GPUInUseMemMiB:   2048,
+	}
+	idle := idleDesktopSnapshot()
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < ticks; i++ {
+				snap := idle
+				if (w+i)%2 == 0 {
+					snap = highLoad
+				}
+				got := ev.Evaluate(snap)
+				if !valid[got] {
+					t.Errorf("goroutine %d, tick %d: Evaluate devolvió un estado fuera del conjunto cerrado: %q", w, i+1, got)
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+}
+
+// TestHighLoadStreakIntegerOverflow drives a single evaluator through 100000
+// consecutive high-load ticks (GPU at 60%, above the 45% threshold). The streak
+// must saturate at SustainedTicksRequired instead of growing without bound
+// (which would eventually overflow into negative territory and re-open the
+// pause decision), and the state must remain StatePausedLoad.
+func TestHighLoadStreakIntegerOverflow(t *testing.T) {
+	const ticks = 100000
+
+	cfg := DefaultConfig()
+	ev := NewEvaluator(cfg)
+	highLoad := SystemSnapshot{
+		HasBattery:       false,
+		OnAC:             true,
+		GPUDeviceUtilPct: 60,
+	}
+
+	for i := 0; i < ticks; i++ {
+		got := ev.Evaluate(highLoad)
+		// Ticks 1 and 2 only build the streak; from tick 3 onwards the pause must
+		// be reported on every single tick.
+		if i >= cfg.SustainedTicksRequired-1 && got != StatePausedLoad {
+			t.Fatalf("tick %d: Evaluate = %q, se esperaba %q", i+1, got, StatePausedLoad)
+		}
+	}
+
+	ev.mu.Lock()
+	streak := ev.highLoadStreak
+	ev.mu.Unlock()
+
+	if streak > cfg.SustainedTicksRequired {
+		t.Fatalf("highLoadStreak = %d tras %d ticks, debe saturarse en <= %d (riesgo de desbordamiento)",
+			streak, ticks, cfg.SustainedTicksRequired)
+	}
+	if streak != cfg.SustainedTicksRequired {
+		t.Errorf("highLoadStreak = %d tras %d ticks, se esperaba exactamente %d",
+			streak, ticks, cfg.SustainedTicksRequired)
+	}
+
+	// Regression: after the saturated streak, a single idle tick must still reset
+	// the counter and return to normal folding.
+	if got := ev.Evaluate(idleDesktopSnapshot()); got != StateFolding {
+		t.Fatalf("tick en reposo tras %d ticks de carga: Evaluate = %q, se esperaba %q (reset de racha roto)",
+			ticks, got, StateFolding)
+	}
+
+	ev.mu.Lock()
+	streakAfterIdle := ev.highLoadStreak
+	ev.mu.Unlock()
+	if streakAfterIdle != 0 {
+		t.Errorf("highLoadStreak = %d tras el tick en reposo, se esperaba 0", streakAfterIdle)
+	}
 }
 
 // FuzzEvaluateNeverPanics subjects Evaluate to arbitrary telemetry combinations

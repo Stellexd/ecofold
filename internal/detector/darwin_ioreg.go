@@ -4,11 +4,16 @@ package detector
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"math"
 	"os/exec"
+	"time"
 
 	"howett.net/plist"
 )
+
+const maxPlistBytes = 16 * 1024 * 1024 // 16 MiB
 
 // BatteryMetrics groups raw values extracted from the IOKit AppleSmartBattery
 // node.
@@ -83,6 +88,10 @@ type ioregGPUNode struct {
 // contains an empty array (a machine without a battery), it returns
 // HasBattery=false without an error.
 func ParseSmartBatteryPlist(raw []byte) (BatteryMetrics, error) {
+	if len(raw) > maxPlistBytes {
+		return BatteryMetrics{}, fmt.Errorf("AppleSmartBattery plist exceeds maximum size: %d bytes", len(raw))
+	}
+
 	var nodes ioregBatteryArray
 	dec := plist.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&nodes); err != nil {
@@ -154,6 +163,10 @@ func ParseSmartBatteryPlist(raw []byte) (BatteryMetrics, error) {
 // the first node containing PerformanceStatistics, without depending on a
 // specific GPU class.
 func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
+	if len(raw) > maxPlistBytes {
+		return GPUMetrics{}, fmt.Errorf("IOAccelerator plist exceeds maximum size: %d bytes", len(raw))
+	}
+
 	var nodes ioregGPUArray
 	dec := plist.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&nodes); err != nil {
@@ -219,7 +232,10 @@ func BuildSnapshotFromPlists(battRaw, gpuRaw []byte) (SystemSnapshot, error) {
 // FetchIOReg runs `ioreg -a -r -d 1 -c <class>` and returns the XML output.
 // It is only available on darwin.
 func FetchIOReg(class string) ([]byte, error) {
-	out, err := exec.Command("ioreg", "-a", "-r", "-d", "1", "-c", class).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "/usr/sbin/ioreg", "-a", "-r", "-d", "1", "-c", class).Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
 			return nil, fmt.Errorf("ioreg %s: %w (stderr: %s)", class, err, string(exitErr.Stderr))
@@ -248,11 +264,18 @@ func FetchIOAccelerator() (GPUMetrics, error) {
 }
 
 // roundedMW calculates round((voltage_mV * amperage_mA) / 1000.0), rounding to
-// the nearest integer while preserving the sign.
+// the nearest integer while preserving the sign. The multiplication is performed
+// in float64 to avoid int64 overflow. The rounded result is saturated to the
+// int64 range because converting an out-of-range float64 to int64 is
+// implementation-specific and can wrap to math.MinInt64 on some platforms.
 func roundedMW(voltageMV int, amperageMA int64) int64 {
-	product := int64(voltageMV) * amperageMA
-	if product >= 0 {
-		return (product + 500) / 1000
+	p := float64(voltageMV) * float64(amperageMA) / 1000.0
+	r := math.Round(p)
+	if r > math.MaxInt64 {
+		return math.MaxInt64
 	}
-	return (product - 500) / 1000
+	if r < math.MinInt64 {
+		return math.MinInt64
+	}
+	return int64(r)
 }
