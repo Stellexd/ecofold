@@ -69,3 +69,6 @@ repomix-output.xml
 mac_telemetry.db
 __pycache__/
 *.pyc
+
+# Placeholder vacío mantenido para preservar la carpeta en repositorios sin archivos reales
+internal/gpu/.gitkeep
