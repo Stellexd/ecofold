@@ -5,7 +5,10 @@ package detector
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os/exec"
 	"time"
@@ -14,6 +17,12 @@ import (
 )
 
 const maxPlistBytes = 16 * 1024 * 1024 // 16 MiB
+
+// maxPlistDepth bounds element nesting in the XML plist. Real ioreg output with
+// -d 1 stays well below 16 levels; the limit keeps the recursive decoder in
+// howett.net/plist from overflowing the goroutine stack, which is fatal and
+// cannot be recovered.
+const maxPlistDepth = 64
 
 // BatteryMetrics groups raw values extracted from the IOKit AppleSmartBattery
 // node.
@@ -88,13 +97,8 @@ type ioregGPUNode struct {
 // contains an empty array (a machine without a battery), it returns
 // HasBattery=false without an error.
 func ParseSmartBatteryPlist(raw []byte) (BatteryMetrics, error) {
-	if len(raw) > maxPlistBytes {
-		return BatteryMetrics{}, fmt.Errorf("AppleSmartBattery plist exceeds maximum size: %d bytes", len(raw))
-	}
-
 	var nodes ioregBatteryArray
-	dec := plist.NewDecoder(bytes.NewReader(raw))
-	if err := dec.Decode(&nodes); err != nil {
+	if err := decodeXMLPlist(raw, &nodes); err != nil {
 		return BatteryMetrics{}, fmt.Errorf("decode AppleSmartBattery plist: %w", err)
 	}
 
@@ -163,13 +167,8 @@ func ParseSmartBatteryPlist(raw []byte) (BatteryMetrics, error) {
 // the first node containing PerformanceStatistics, without depending on a
 // specific GPU class.
 func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
-	if len(raw) > maxPlistBytes {
-		return GPUMetrics{}, fmt.Errorf("IOAccelerator plist exceeds maximum size: %d bytes", len(raw))
-	}
-
 	var nodes ioregGPUArray
-	dec := plist.NewDecoder(bytes.NewReader(raw))
-	if err := dec.Decode(&nodes); err != nil {
+	if err := decodeXMLPlist(raw, &nodes); err != nil {
 		return GPUMetrics{}, fmt.Errorf("decode IOAccelerator plist: %w", err)
 	}
 
@@ -193,6 +192,70 @@ func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
 	}
 
 	return GPUMetrics{}, nil
+}
+
+// decodeXMLPlist decodes an ioreg XML plist into v. Only well-formed XML with a
+// <plist> root is accepted: binary and text plists are rejected before reaching
+// howett.net/plist, whose binary parser can panic or burn quadratic CPU on
+// crafted input and whose text parser is reachable when XML parsing fails.
+// Any panic the decoder still raises is converted into an error.
+func decodeXMLPlist(raw []byte, v any) (err error) {
+	if err := validateXMLPlist(raw); err != nil {
+		return err
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("plist decoder panic: %v", r)
+		}
+	}()
+
+	return plist.NewDecoder(bytes.NewReader(raw)).Decode(v)
+}
+
+// validateXMLPlist checks size, format and nesting depth without recursion, so
+// hostile input is rejected before any recursive parser sees it.
+func validateXMLPlist(raw []byte) error {
+	if len(raw) > maxPlistBytes {
+		return fmt.Errorf("plist exceeds maximum size: %d bytes", len(raw))
+	}
+	if bytes.HasPrefix(raw, []byte("bplist")) {
+		return errors.New("binary plist not supported: expected XML")
+	}
+
+	dec := xml.NewDecoder(bytes.NewReader(raw))
+	depth := 0
+	sawRoot := false
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("invalid XML plist: %w", err)
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if depth == 0 {
+				if sawRoot || t.Name.Local != "plist" {
+					return fmt.Errorf("invalid XML plist: unexpected root element <%s>", t.Name.Local)
+				}
+				sawRoot = true
+			}
+			depth++
+			if depth > maxPlistDepth {
+				return fmt.Errorf("plist nesting exceeds maximum depth %d", maxPlistDepth)
+			}
+		case xml.EndElement:
+			depth--
+		}
+	}
+
+	if !sawRoot {
+		return errors.New("invalid XML plist: missing <plist> root element")
+	}
+	return nil
 }
 
 // BuildSnapshotFromPlists combines the battery and GPU plists into a

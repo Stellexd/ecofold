@@ -24,7 +24,7 @@ Status: pending decision.
 
 ## Blockers for v0.0.1
 
-- [ ] **A1 (High) Unrecovered panic on binary plist**
+- [x] **A1 (High) Unrecovered panic on binary plist**
   - Where: `internal/detector/darwin_ioreg.go:90` and `:165`
     (`ParseSmartBatteryPlist`, `ParseIOAcceleratorPlist`, and therefore
     `BuildSnapshotFromPlists`).
@@ -34,7 +34,7 @@ Status: pending decision.
   - Fix: accept only XML and reject the `bplist` magic bytes. Wrap the decode
     in `recover` and convert the panic into an error.
 
-- [ ] **A2 (High) Fatal stack overflow on deeply nested XML**
+- [x] **A2 (High) Fatal stack overflow on deeply nested XML**
   - Where: `internal/detector/darwin_ioreg.go:16` (`maxPlistBytes`).
   - Problem: an XML document nested deeply enough to stay under the 16 MiB
     limit (about 15 MB) crashes the process. A Go stack overflow is fatal and
@@ -43,32 +43,65 @@ Status: pending decision.
     limit (for example 64). Optionally lower `maxPlistBytes` to a size that is
     realistic for `ioreg` output.
 
-- [ ] **M1 (Medium) Quadratic CPU on binary plist with nesting chains**
+- [x] **M1 (Medium) Quadratic CPU on binary plist with nesting chains**
   - Where: same as A1.
   - Problem: CPU stays at 100% for minutes on crafted binary input.
   - Fix: resolved by the XML-only change in A1.
 
-- [ ] **M2 (Medium) `RestoreDefaultPowerLimit` does not validate the default**
+- [x] **M2 (Medium) `RestoreDefaultPowerLimit` does not validate the default**
   - Where: `internal/gpu/nvidia_linux.go:136`.
   - Problem: the default limit read from NVML is applied without checking it
     against the device constraints.
   - Fix: read `GetPowerManagementLimitConstraints`, then clamp or reject the
     default before calling `SetPowerManagementLimit`.
 
-- [ ] **M5 (Medium) `NewEvaluator` only checks lower bounds**
+- [x] **M5 (Medium) `NewEvaluator` only checks lower bounds**
   - Where: `internal/detector/detector.go:151`.
   - Problem: with `GPUUtilThresholdPct > 100`, folding is never paused for GPU
     load (fail-open).
   - Fix: reset values above 100 to their defaults (also
     `GPUMemRequiresUtilPct`). Add a test for these cases.
 
-- [ ] **M7 (Low) `make build-linux` silently builds the non-TDP stub**
+- [x] **M7 (Low) `make build-linux` silently builds the non-TDP stub**
   - Where: `Makefile`, target `build-linux` (`GOOS=linux go build ./...`).
   - Problem: on macOS, CGO is disabled, so `internal/gpu/stub_linux.go` is
     compiled instead of the NVML provider. The build passes without any
     power-limit control.
   - Fix: warn or fail when `CGO_ENABLED != 1`, or rename the target so it is
     clearly a compile-only check.
+
+Status: the six blockers above were fixed in branch `fix/m1-review-hardening`.
+M5 was extended to also bound `SustainedTicksRequired` (`> 60` resets to the
+default), and M2 also rejects a zero maximum constraint. The M2 change has
+only been reviewed on macOS; it must be compiled and tested on Linux with
+`CGO_ENABLED=1` before tagging.
+
+## Residual risks (non-blocking)
+
+Found by the adversarial test pass on `fix/m1-review-hardening`.
+
+- [ ] **R1 `FetchIOReg` reads unbounded output**
+  - Where: `internal/detector/darwin_ioreg.go` (`FetchIOReg`).
+  - Problem: `Output()` buffers all of `ioreg`'s stdout before the size check.
+  - Fix: read stdout through `io.LimitReader(maxPlistBytes+1)`.
+
+- [ ] **R2 16 MiB plist cap is larger than needed**
+  - Problem: `howett.net/plist` materializes roughly 10-15x the input in
+    memory (about 180 MB worst case). Real `ioreg -d 1` output is under 1 MiB.
+  - Fix: lower `maxPlistBytes` (for example to 2 MiB) and adjust the tests.
+
+- [ ] **R3 `GPUUtilThresholdPct = 100` plus a huge `GPUMemThresholdMiB`**
+  - Problem: both values are in range, but together 99% utilization never
+    pauses. Pinned by `TestMaxUtilThresholdPlusHugeMemDisablesPause`.
+  - Fix: decide on an upper bound for `GPUMemThresholdMiB` or for the
+    utilization threshold.
+
+- [ ] **R4 Transient empty `AppleSmartBattery` output folds at full power**
+  - Problem: an empty array is treated as a desktop Mac (`OnAC=true`,
+    `BatteryPct=100`). A transient empty result on a laptop would fold as if
+    plugged in.
+  - Fix: cache `HasBattery` from the first successful read and treat a later
+    empty result as an error.
 
 ## Deferred to the daemon milestone (M3)
 
@@ -99,3 +132,5 @@ are designed.
 
 Items are marked `[x]` when resolved. Reference the commit that fixes each item
 in the checklist entry.
+
+See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verification procedure.

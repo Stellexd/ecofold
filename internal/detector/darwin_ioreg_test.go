@@ -326,3 +326,68 @@ func FuzzBuildSnapshotFromPlists(f *testing.F) {
 		_ = NewEvaluator(DefaultConfig()).Evaluate(snap)
 	})
 }
+
+// TestParseRejectsNonXMLPlists verifies that binary, text and non-plist inputs
+// are rejected before reaching howett.net/plist (A1/M1 in docs/PENDING.md).
+func TestParseRejectsNonXMLPlists(t *testing.T) {
+	inputs := map[string][]byte{
+		"binary":       append([]byte("bplist00"), make([]byte, 45)...),
+		"openstep":     []byte(`({a=b;})`),
+		"hex_data":     []byte(`<0a0b>`),
+		"wrong_root":   []byte(`<?xml version="1.0"?><array/>`),
+		"two_roots":    []byte(`<plist version="1.0"><array/></plist><plist/>`),
+		"empty":        {},
+		"unterminated": []byte(`<plist version="1.0"><array>`),
+	}
+
+	for name, raw := range inputs {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseSmartBatteryPlist(raw); err == nil {
+				t.Errorf("ParseSmartBatteryPlist(%q) devolvió nil error", raw)
+			}
+			if _, err := ParseIOAcceleratorPlist(raw); err == nil {
+				t.Errorf("ParseIOAcceleratorPlist(%q) devolvió nil error", raw)
+			}
+		})
+	}
+}
+
+// TestParseRejectsDeepNesting verifies that deeply nested XML is rejected by
+// the iterative depth check instead of overflowing the stack (A2).
+func TestParseRejectsDeepNesting(t *testing.T) {
+	const depth = 1_000_000
+	var b []byte
+	b = append(b, `<plist version="1.0">`...)
+	for range depth {
+		b = append(b, "<array>"...)
+	}
+	for range depth {
+		b = append(b, "</array>"...)
+	}
+	b = append(b, `</plist>`...)
+	if len(b) > maxPlistBytes {
+		t.Fatalf("entrada de prueba de %d bytes supera maxPlistBytes; ajustar depth", len(b))
+	}
+
+	if _, err := ParseIOAcceleratorPlist(b); err == nil {
+		t.Fatal("ParseIOAcceleratorPlist con anidamiento profundo devolvió nil error")
+	}
+}
+
+// TestParseAcceptsNestingAtLimit verifies that the depth limit does not reject
+// valid plists right at maxPlistDepth.
+func TestParseAcceptsNestingAtLimit(t *testing.T) {
+	var b []byte
+	b = append(b, `<plist version="1.0">`...)
+	for range maxPlistDepth - 1 {
+		b = append(b, "<array>"...)
+	}
+	for range maxPlistDepth - 1 {
+		b = append(b, "</array>"...)
+	}
+	b = append(b, `</plist>`...)
+
+	if err := validateXMLPlist(b); err != nil {
+		t.Fatalf("validateXMLPlist con profundidad %d devolvió error: %v", maxPlistDepth, err)
+	}
+}
