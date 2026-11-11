@@ -16,7 +16,10 @@ import (
 	"howett.net/plist"
 )
 
-const maxPlistBytes = 16 * 1024 * 1024 // 16 MiB
+// maxPlistBytes bounds the ioreg output that is read and parsed. Real
+// `ioreg -d 1` output is well under 1 MiB, and howett.net/plist materializes
+// roughly 10-15x the input in memory, so a larger cap only widens the DoS budget.
+const maxPlistBytes = 2 * 1024 * 1024 // 2 MiB
 
 // maxPlistDepth bounds element nesting in the XML plist. Real ioreg output with
 // -d 1 stays well below 16 levels; the limit keeps the recursive decoder in
@@ -219,7 +222,7 @@ func validateXMLPlist(raw []byte) error {
 	if len(raw) > maxPlistBytes {
 		return fmt.Errorf("plist exceeds maximum size: %d bytes", len(raw))
 	}
-	if bytes.HasPrefix(raw, []byte("bplist")) {
+	if bytes.HasPrefix(bytes.TrimSpace(raw), []byte("bplist")) {
 		return errors.New("binary plist not supported: expected XML")
 	}
 
@@ -293,17 +296,39 @@ func BuildSnapshotFromPlists(battRaw, gpuRaw []byte) (SystemSnapshot, error) {
 }
 
 // FetchIOReg runs `ioreg -a -r -d 1 -c <class>` and returns the XML output.
-// It is only available on darwin.
+// At most maxPlistBytes+1 bytes of stdout are kept in memory, so oversized
+// output is rejected by the parsers' size guard instead of being buffered
+// whole. It is only available on darwin.
 func FetchIOReg(class string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "/usr/sbin/ioreg", "-a", "-r", "-d", "1", "-c", class).Output()
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "/usr/sbin/ioreg", "-a", "-r", "-d", "1", "-c", class)
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
-			return nil, fmt.Errorf("ioreg %s: %w (stderr: %s)", class, err, string(exitErr.Stderr))
+		return nil, fmt.Errorf("ioreg %s: %w", class, err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("ioreg %s: %w", class, err)
+	}
+
+	out, readErr := io.ReadAll(io.LimitReader(stdout, maxPlistBytes+1))
+	if len(out) > maxPlistBytes {
+		// Stop ioreg instead of draining the rest of its output.
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("ioreg %s: output exceeds maximum size of %d bytes", class, maxPlistBytes)
+	}
+	if err := cmd.Wait(); err != nil {
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("ioreg %s: %w (stderr: %s)", class, err, stderr.String())
 		}
 		return nil, fmt.Errorf("ioreg %s: %w", class, err)
+	}
+	if readErr != nil {
+		return nil, fmt.Errorf("ioreg %s: %w", class, readErr)
 	}
 	return out, nil
 }

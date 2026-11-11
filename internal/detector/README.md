@@ -73,8 +73,9 @@ Default values (`DefaultConfig`):
 The `NewEvaluator` constructor clamps invalid or overly aggressive values to
 defaults; for example, `GPUUtilThresholdPct <= 25` is forced to 45% so that the
 ~24% idle level is not mistaken for a game. The clamps are: `GPUUtilThresholdPct
-<= 25` → 45, `GPUMemThresholdMiB <= 0` → 1500, `SustainedTicksRequired <= 0` →
-3, `GPUMemRequiresUtilPct <= 0` → 25, and `MinBatteryPct < 0` → 50.
+<= 25` or `> 100` → 45, `GPUMemThresholdMiB <= 0` → 1500,
+`SustainedTicksRequired <= 0` or `> 60` → 3, `GPUMemRequiresUtilPct < 25` or
+`> GPUUtilThresholdPct` → 25, and `MinBatteryPct < 0` or `> 100` → 50.
 
 `AllowBatteryFolding=false` in `Config{}` is intentional and conservative: a
 zero-value `Config{}` never folds on battery. Callers that want `true` must start
@@ -82,7 +83,6 @@ from `DefaultConfig()`.
 
 ## Known limitations / open items
 
-- `Evaluator` is not thread-safe.
 - The thresholds (45% / 25% / 1500 MiB) have not yet been calibrated under real load.
 - The battery-less desktop fixture is synthetic (there is no real Mac Studio dump).
 - The `OnAC` semantics (`ExternalConnected || IPDInputPower>0`) still need to be

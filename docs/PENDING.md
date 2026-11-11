@@ -81,15 +81,19 @@ compiled and tested on Linux with `CGO_ENABLED=1` on 2026-11-11 (see
 
 Found by the adversarial test pass on `fix/m1-review-hardening`.
 
-- [ ] **R1 `FetchIOReg` reads unbounded output**
+- [x] **R1 `FetchIOReg` reads unbounded output** (branch `fix/m1-residual-risks`)
   - Where: `internal/detector/darwin_ioreg.go` (`FetchIOReg`).
   - Problem: `Output()` buffers all of `ioreg`'s stdout before the size check.
   - Fix: read stdout through `io.LimitReader(maxPlistBytes+1)`.
+  - Resolution: `FetchIOReg` reads through `cmd.StdoutPipe()` and
+    `io.LimitReader`, and kills `ioreg` when the output exceeds the cap.
 
-- [ ] **R2 16 MiB plist cap is larger than needed**
+- [x] **R2 16 MiB plist cap is larger than needed** (branch `fix/m1-residual-risks`)
   - Problem: `howett.net/plist` materializes roughly 10-15x the input in
     memory (about 180 MB worst case). Real `ioreg -d 1` output is under 1 MiB.
   - Fix: lower `maxPlistBytes` (for example to 2 MiB) and adjust the tests.
+  - Resolution: `maxPlistBytes` is 2 MiB. The binary plist check now ignores
+    leading whitespace. Size-dependent tests and benchmarks were adjusted.
 
 - [ ] **R3 `GPUUtilThresholdPct = 100` plus a huge `GPUMemThresholdMiB`**
   - Problem: both values are in range, but together 99% utilization never
@@ -124,12 +128,22 @@ are designed.
   - Fix: give the restore path a timeout or bound it, or do not serialize
     restoration behind telemetry reads.
 
-- [ ] **M6 MockProvider does not mirror the real lifecycle**
+- [x] **M6 MockProvider does not mirror the real lifecycle** (branch `fix/m1-residual-risks`)
   - Where: `internal/gpu/mock_darwin.go`.
   - Problem: the mock works without `Init`, and `Shutdown` is a no-op. NVML
     fails when it is not initialized.
   - Fix: return a "not initialized" error before `Init` and after `Shutdown`,
     matching the Linux stub behavior.
+  - Resolution: `MockProvider` and the Linux `stubProvider` track an
+    `initialized` flag and return `gpu: provider not initialized` before `Init`
+    and after `Shutdown`. Covered by `TestMockProviderLifecycle`.
+
+## Additional hardening
+
+- [x] **`MinBatteryPct > 100` disables battery folding** (branch
+  `fix/m1-residual-risks`). An unreachable threshold always paused on battery.
+  `NewEvaluator` now resets values above 100 to the default (50). Covered by
+  `TestMinBatteryPctAboveHundredIsClamped`.
 
 Items are marked `[x]` when resolved. Reference the commit that fixes each item
 in the checklist entry.

@@ -152,7 +152,7 @@ type Evaluator struct {
 // would disable load pausing); GPUMemThresholdMiB <= 0 is forced to 1500;
 // SustainedTicksRequired <= 0 or > 60 is forced to 3; GPUMemRequiresUtilPct below 25 or
 // greater than GPUUtilThresholdPct is forced to 25 (never below 25);
-// MinBatteryPct < 0 is forced to 50.
+// MinBatteryPct < 0 or > 100 is forced to 50.
 //
 // AllowBatteryFolding's zero value (false) is intentional and conservative: a
 // Config{} never folds on battery; callers that want true must start from
@@ -170,7 +170,7 @@ func NewEvaluator(cfg Config) *Evaluator {
 	if cfg.GPUMemRequiresUtilPct < 25 || cfg.GPUMemRequiresUtilPct > cfg.GPUUtilThresholdPct {
 		cfg.GPUMemRequiresUtilPct = DefaultConfig().GPUMemRequiresUtilPct
 	}
-	if cfg.MinBatteryPct < 0 {
+	if cfg.MinBatteryPct < 0 || cfg.MinBatteryPct > 100 {
 		cfg.MinBatteryPct = DefaultConfig().MinBatteryPct
 	}
 	return &Evaluator{cfg: cfg}

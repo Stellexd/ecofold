@@ -271,7 +271,7 @@ func TestSizeLimitExactBoundary(t *testing.T) {
 // TestLargeDataElementDoesNotExplode is a DoS smoke test: a <data> element near
 // the input budget must decode in linear-ish time without panics.
 func TestLargeDataElementDoesNotExplode(t *testing.T) {
-	payload := bytes.Repeat([]byte("A"), 4*1024*1024) // 4 MiB of base64-ish text
+	payload := bytes.Repeat([]byte("A"), maxPlistBytes-64) // just under the size cap
 	var b bytes.Buffer
 	b.WriteString(`<plist version="1.0"><data>`)
 	b.Write(payload)
@@ -344,7 +344,7 @@ func FuzzValidateThenDecodeStaysXML(f *testing.F) {
 // XML comment. It is used to check that the size guard is not hiding quadratic
 // CPU behavior: 2x the bytes should cost roughly 2x, not 4x.
 func BenchmarkValidateHugeComment(b *testing.B) {
-	for _, size := range []int{1 << 20, 4 << 20, 8 << 20, 15 << 20} {
+	for _, size := range []int{256 << 10, 512 << 10, 1 << 20, maxPlistBytes} {
 		filler := size - len(`<!--`) - len(`-->`) - len(`<plist version="1.0"><array/></plist>`)
 		doc := make([]byte, 0, size)
 		doc = append(doc, `<!--`...)
@@ -352,7 +352,7 @@ func BenchmarkValidateHugeComment(b *testing.B) {
 		doc = append(doc, `-->`...)
 		doc = append(doc, `<plist version="1.0"><array/></plist>`...)
 
-		b.Run(fmt.Sprintf("%dMiB", size>>20), func(b *testing.B) {
+		b.Run(fmt.Sprintf("%dKiB", size>>10), func(b *testing.B) {
 			b.SetBytes(int64(len(doc)))
 			for i := 0; i < b.N; i++ {
 				if err := validateXMLPlist(doc); err != nil {

@@ -67,3 +67,48 @@ func TestMockProviderContract(t *testing.T) {
 		t.Fatalf("Shutdown() failed: %v", err)
 	}
 }
+
+// TestMockProviderLifecycle checks that the mock mirrors NVML: every method
+// fails with "not initialized" before Init and again after Shutdown (M6).
+func TestMockProviderLifecycle(t *testing.T) {
+	mp := &MockProvider{}
+
+	assertNotInitialized := func(t *testing.T, stage string) {
+		t.Helper()
+		const want = "gpu: provider not initialized"
+		if _, err := mp.GetTelemetry(); err == nil || err.Error() != want {
+			t.Errorf("%s: GetTelemetry() error = %v, want %q", stage, err, want)
+		}
+		if err := mp.SetPowerLimit(123); err == nil || err.Error() != want {
+			t.Errorf("%s: SetPowerLimit() error = %v, want %q", stage, err, want)
+		}
+		if err := mp.RestoreDefaultPowerLimit(); err == nil || err.Error() != want {
+			t.Errorf("%s: RestoreDefaultPowerLimit() error = %v, want %q", stage, err, want)
+		}
+		if procs, err := mp.GetGraphicsProcesses(); err == nil || err.Error() != want || procs != nil {
+			t.Errorf("%s: GetGraphicsProcesses() = %v, %v, want nil, %q", stage, procs, err, want)
+		}
+	}
+
+	assertNotInitialized(t, "before Init")
+
+	if err := mp.Init(); err != nil {
+		t.Fatalf("Init() failed: %v", err)
+	}
+	if _, err := mp.GetTelemetry(); err != nil {
+		t.Fatalf("GetTelemetry() after Init failed: %v", err)
+	}
+
+	if err := mp.Shutdown(); err != nil {
+		t.Fatalf("Shutdown() failed: %v", err)
+	}
+	assertNotInitialized(t, "after Shutdown")
+
+	// Init after Shutdown must make the provider usable again.
+	if err := mp.Init(); err != nil {
+		t.Fatalf("second Init() failed: %v", err)
+	}
+	if _, err := mp.GetTelemetry(); err != nil {
+		t.Fatalf("GetTelemetry() after second Init failed: %v", err)
+	}
+}

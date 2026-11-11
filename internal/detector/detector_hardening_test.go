@@ -102,3 +102,23 @@ func TestMaxUtilThresholdPlusHugeMemDisablesPause(t *testing.T) {
 		}
 	}
 }
+
+// TestMinBatteryPctAboveHundredIsClamped checks that an unreachable battery
+// threshold is reset to the default instead of pausing on battery forever.
+func TestMinBatteryPctAboveHundredIsClamped(t *testing.T) {
+	want := DefaultConfig().MinBatteryPct
+	for _, pct := range []int{101, 1000, math.MaxInt} {
+		cfg := DefaultConfig()
+		cfg.MinBatteryPct = pct
+		if got := NewEvaluator(cfg).cfg.MinBatteryPct; got != want {
+			t.Errorf("MinBatteryPct(%d) = %d, se esperaba %d", pct, got, want)
+		}
+	}
+
+	// 100 is a valid (if strict) threshold and must be preserved.
+	cfg := DefaultConfig()
+	cfg.MinBatteryPct = 100
+	if got := NewEvaluator(cfg).cfg.MinBatteryPct; got != 100 {
+		t.Errorf("MinBatteryPct(100) = %d, se esperaba 100", got)
+	}
+}
