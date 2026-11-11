@@ -167,6 +167,9 @@ See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verificatio
   context that `Close` cancels. Covered by `TestCloseAbortsInFlightDial`.
 - [x] **CH-7 Linux compile check.** `make test` passed on CachyOS with the
   `mwToWCeil` change in `nvidia_linux.go` (2026-11-11).
+- [ ] **CH2 H1: never skip a pause because FAH looks idle.** A running unit
+  with an unreadable project is reported as `idle`. When a game is detected,
+  the daemon must send `Pause` regardless of `Status.State`.
 - [ ] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
   it paused folding itself, and must not resume a pause the user made by hand.
 - [ ] **CH-11 NVML lifecycle.** Calling `Init` twice leaks an NVML reference,

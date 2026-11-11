@@ -1,4 +1,4 @@
-//go:build chaos
+// Regression tests for the second chaos pass (docs/CHAOS_REPORT_2.md).
 
 package fah
 
@@ -9,21 +9,27 @@ import (
 	"time"
 )
 
-// CH2-1: a ClientV8 not built by NewClientV8 used to tolerate Close (nil map
-// range is fine). Close now calls the nil shutdown func and panics.
-func TestChaos2ZeroValueClosePanics(t *testing.T) {
+// CH2-1: a ClientV8 not built by NewClientV8 must not panic: Close is a no-op
+// and calls fail with an error.
+func TestZeroValueClientV8DoesNotPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
-			t.Fatalf("Close on zero-value ClientV8 panicked: %v", r)
+			t.Fatalf("zero-value ClientV8 panicked: %v", r)
 		}
 	}()
 	var c ClientV8
+	if _, err := c.GetStatus(context.Background()); err == nil {
+		t.Fatal("GetStatus on a zero-value ClientV8 succeeded")
+	}
+	if err := c.Pause(context.Background()); err == nil {
+		t.Fatal("Pause on a zero-value ClientV8 succeeded")
+	}
 	_ = c.Close()
 }
 
-// CH2-4: one Pause against a FAH client that never reports paused opens a new
-// TCP connection + WebSocket handshake every ~50 ms until the deadline.
-func TestChaos2PauseConnectionAmplification(t *testing.T) {
+// CH2-4: one Pause against a FAH client that never reports paused must back
+// off between state reads instead of opening a connection every 50 ms.
+func TestUnconfirmedPauseBacksOff(t *testing.T) {
 	var conns atomic.Int64
 	srv := startFakeFAH(t, func(sc *serverConn) {
 		conns.Add(1)

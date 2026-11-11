@@ -66,3 +66,14 @@ The 7 tests in `internal/fah/regression_test.go` and the untagged `Chaos2` fah t
 - Server RST that arrives exactly at the deadline (a timing race that cannot be produced deterministically on loopback).
 - Daemon-level consequences of CH2-1, CH2-3 and CH2-H1: the daemon control loop is not implemented yet.
 - govulncheck was not re-run, because the dependency set did not change in the diff.
+
+## Resolution (branch `fix/m1-chaos-findings`, PR #12)
+
+| ID | Status | Fix | Regression test |
+| --- | --- | --- | --- |
+| CH2-2 | Fixed | `statUint` caps at `math.MaxInt64`. Percentages go through `statPct`, which clamps to [0, 100], so an absurd value saturates at 100 (high load, pause) instead of wrapping negative. | `TestHugeIntegerStatSaturates` |
+| CH2-4 | Fixed | The confirmation poll interval starts at 50 ms and doubles up to 800 ms. An unconfirmed Pause now opens 8 connections in 3 s instead of 59. | `TestUnconfirmedPauseBacksOff` |
+| CH2-3 | Fixed | `powerRangeW` returns the minimum rounded up and the maximum rounded down. When no whole watt fits, it reports both as the floored maximum and `NvidiaProvider` sets `SupportsPowerLimit=false`. | `TestPowerRangeW` |
+| CH2-1 | Fixed | `Close` tolerates a nil `shutdown`. `do` returns an error when the client was not built with `NewClientV8`. | `TestZeroValueClientV8DoesNotPanic` |
+| H1 | Deferred | Daemon rule, tracked in `docs/PENDING.md`. | none |
+| H2, H3 | Accepted | Harmless: the command is still sent, and non-ASCII bytes cannot split the request line. | none |

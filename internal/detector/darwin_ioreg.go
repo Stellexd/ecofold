@@ -189,9 +189,9 @@ func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
 
 		return GPUMetrics{
 			GPUClass:           gpuClass,
-			GPUDeviceUtilPct:   int(statUint(n.PerformanceStatistics, "Device Utilization %")),
-			GPURendererUtilPct: int(statUint(n.PerformanceStatistics, "Renderer Utilization %")),
-			GPUTilerUtilPct:    int(statUint(n.PerformanceStatistics, "Tiler Utilization %")),
+			GPUDeviceUtilPct:   statPct(n.PerformanceStatistics, "Device Utilization %"),
+			GPURendererUtilPct: statPct(n.PerformanceStatistics, "Renderer Utilization %"),
+			GPUTilerUtilPct:    statPct(n.PerformanceStatistics, "Tiler Utilization %"),
 			GPUInUseMemMiB:     int(statUint(n.PerformanceStatistics, "In use system memory") / 1024 / 1024),
 		}, nil
 	}
@@ -199,13 +199,21 @@ func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
 	return GPUMetrics{}, nil
 }
 
-// statUint returns stats[key] as an unsigned integer. Integers and finite,
-// non-negative reals are accepted; missing keys and any other type yield 0,
-// matching the "missing performance keys degrade to 0" rule.
+// statPct returns stats[key] as a percentage clamped to [0, 100]. An absurd
+// value saturates at 100, so it reads as high load (pause) rather than wrapping
+// to a negative number that never crosses a threshold.
+func statPct(stats map[string]any, key string) int {
+	return int(min(statUint(stats, key), 100))
+}
+
+// statUint returns stats[key] as an unsigned integer no larger than
+// math.MaxInt64, so later int conversions cannot wrap negative. Integers and
+// finite, non-negative reals are accepted; missing keys and any other type
+// yield 0, matching the "missing performance keys degrade to 0" rule.
 func statUint(stats map[string]any, key string) uint64 {
 	switch v := stats[key].(type) {
 	case uint64:
-		return v
+		return min(v, math.MaxInt64)
 	case int64:
 		if v > 0 {
 			return uint64(v)

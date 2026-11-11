@@ -73,6 +73,19 @@ func mwToW(mw uint32) int {
 	return int(mw / 1000)
 }
 
+// powerRangeW converts NVML power-limit constraints to whole watts that
+// SetPowerLimit accepts: the minimum rounded up and the maximum rounded down.
+// ok is false when no whole watt fits (for example [123500, 123900] mW), in
+// which case the limit cannot be set in watts and both bounds report the
+// floored maximum.
+func powerRangeW(minMW, maxMW uint32) (lo, hi int, ok bool) {
+	lo, hi = mwToWCeil(minMW), mwToW(maxMW)
+	if lo > hi {
+		return hi, hi, false
+	}
+	return lo, hi, true
+}
+
 // mwToWCeil converts milliwatts to watts rounding up. It is used for minimum
 // limits: a floored minimum (123 W for 123500 mW) would advertise a value
 // that SetPowerLimit then rejects as below the real minimum.

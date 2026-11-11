@@ -49,9 +49,12 @@ const (
 	// closeDrainTimeout bounds the wait for the server's close frame.
 	closeDrainTimeout = 250 * time.Millisecond
 
-	// confirmInterval is the pause between state reads while confirming that
-	// FAH applied a command.
-	confirmInterval = 50 * time.Millisecond
+	// confirmInterval is the first pause between state reads while confirming
+	// that FAH applied a command. It doubles after each read, up to
+	// maxConfirmInterval, so an unconfirmed command opens a handful of
+	// connections instead of one every 50 ms.
+	confirmInterval    = 50 * time.Millisecond
+	maxConfirmInterval = 800 * time.Millisecond
 
 	// websocketGUID is the fixed RFC 6455 handshake GUID.
 	websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -205,7 +208,9 @@ func (c *ClientV8) Close() error {
 	defer c.mu.Unlock()
 
 	c.closed = true
-	c.shutdown()
+	if c.shutdown != nil {
+		c.shutdown()
+	}
 	for conn := range c.conns {
 		_ = conn.Close()
 	}
@@ -255,6 +260,7 @@ func (c *ClientV8) sendState(ctx context.Context, state string) error {
 func (c *ClientV8) confirmPaused(ctx context.Context, op string, want bool) error {
 	var last Status
 	var lastErr error
+	wait := confirmInterval
 	for {
 		last, lastErr = c.GetStatus(ctx)
 		if lastErr == nil && last.Paused == want {
@@ -263,7 +269,8 @@ func (c *ClientV8) confirmPaused(ctx context.Context, op string, want bool) erro
 		if errors.Is(lastErr, ErrClosed) {
 			return fmt.Errorf("fah: %s not confirmed: %w", op, ErrClosed)
 		}
-		t := time.NewTimer(confirmInterval)
+		t := time.NewTimer(wait)
+		wait = min(2*wait, maxConfirmInterval)
 		select {
 		case <-ctx.Done():
 			t.Stop()
@@ -290,6 +297,9 @@ func (c *ClientV8) withDefaultTimeout(ctx context.Context) (context.Context, con
 func (c *ClientV8) do(ctx context.Context, op string, fn func(*wsConn) error) error {
 	if c.isClosed() {
 		return ErrClosed
+	}
+	if c.dial == nil || c.done == nil || c.conns == nil {
+		return errors.New("fah: ClientV8 must be created with NewClientV8")
 	}
 	ctx, cancel := c.withDefaultTimeout(ctx)
 	defer cancel()
