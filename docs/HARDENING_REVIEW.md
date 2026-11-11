@@ -88,8 +88,9 @@ Checklist:
 - [x] **4. Run the tests** (`make test`). The macOS-only parser and fuzz tests
   (`darwin_ioreg*_test.go`) do not run on Linux.
 - [x] **5. Record the result** (table above).
-- [ ] **6. End-to-end NVML test.** `RestoreDefaultPowerLimit` has not been
-  exercised against real hardware yet. The opt-in test
+- [x] **6. End-to-end NVML test.** `RestoreDefaultPowerLimit` has been
+  exercised against real hardware. Result: test PASS on RTX 5060, limit
+  restored to 145 W (2026-11-11, commit `afdd1f7`). The opt-in test
   `internal/gpu/nvidia_integration_linux_test.go`
   (`//go:build linux && cgo && nvml_integration`) lowers the limit to the
   device minimum, restores the default, and verifies both through

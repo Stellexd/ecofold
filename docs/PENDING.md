@@ -74,8 +74,9 @@ Status: the six blockers above were fixed in branch `fix/m1-review-hardening`.
 M5 was extended to also bound `SustainedTicksRequired` (`> 60` resets to the
 default), and M2 also rejects a zero maximum constraint. The M2 change was
 compiled and tested on Linux with `CGO_ENABLED=1` on 2026-11-11 (see
-`docs/HARDENING_REVIEW.md`). The end-to-end NVML test of
-`RestoreDefaultPowerLimit` is still pending.
+`docs/HARDENING_REVIEW.md`). `RestoreDefaultPowerLimit` was then verified end
+to end on the RTX 5060 with the opt-in `nvml_integration` test (PASS, limit
+restored to 145 W).
 
 ## Residual risks (non-blocking)
 
