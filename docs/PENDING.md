@@ -20,7 +20,10 @@ Options:
   "GPU Provider + macOS detector". This is the recommended option because it is
   more accurate and faster.
 
-Status: pending decision.
+Status: resolved with option (a). The FAH Controller (`internal/fah`:
+`Controller` interface, FAH v8 WebSocket client and `MockController`) was
+implemented in branch `feat/m1-fah-controller`. It still needs to be checked
+against the real FAH v8.5.6 Docker container on CachyOS before tagging.
 
 ## Blockers for v0.0.1
 
