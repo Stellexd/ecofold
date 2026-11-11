@@ -20,7 +20,17 @@ Options:
   "GPU Provider + macOS detector". This is the recommended option because it is
   more accurate and faster.
 
-Status: pending decision.
+Status: resolved with option (a). The FAH Controller (`internal/fah`:
+`Controller` interface, FAH v8 WebSocket client and `MockController`) was
+implemented in branch `feat/m1-fah-controller` and verified on 2026-11-11
+against the real FAH v8.5.6 Docker container on CachyOS: the WebSocket upgrade
+without an `Origin` header returns 101, and a live run went from folding
+(project 18264) to paused and back to folding.
+
+- [ ] **FAH API exposed on the LAN.** The `foldingathome` container publishes
+  `0.0.0.0:7396`, so any host on the local network can pause or reconfigure
+  the client. EcoFold only connects over loopback; publish the port as
+  `127.0.0.1:7396:7396` instead. This is a deployment change, not a code change.
 
 ## Blockers for v0.0.1
 
