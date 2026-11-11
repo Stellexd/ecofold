@@ -260,3 +260,22 @@ level reference counting or `sync.Once`).
 | `internal/gpu/chaos_mock_darwin_test.go` | `darwin` | Mock lifecycle race test |
 
 Run all repros: `go test -tags chaos -race -run Chaos -v ./internal/...`
+
+## 7. Resolution (branch `fix/m1-chaos-findings`)
+
+| ID | Status | Fix | Regression test |
+| --- | --- | --- | --- |
+| CH-1 | Fixed | `Pause`/`Resume` return nil only after a fresh snapshot confirms the requested `Paused` value (polled every 50 ms within the ctx deadline). `Close` stops the confirmation with `ErrClosed`. | `TestPauseFailsWithoutDelivery`, `TestCloseStopsPauseConfirmation` |
+| CH-5 | Fixed | `wrapErr` reports a net timeout at or after the ctx deadline as `context.DeadlineExceeded`, for dial and I/O errors alike. `TestClientV8DefaultTimeout` passed 300/300 runs. | `TestDeadlineErrorAlwaysWrapsDeadlineExceeded` |
+| CH-3 | Fixed | Units are decoded one by one and invalid units are skipped. The project is read as `json.Number`, so integral floats and numeric strings are accepted, and anything else maps to 0. `paused` is still strict, so the parser fails closed. | `TestPauseToleratesUnitSchemaDrift`, `TestParseFAHMessageToleratesUnitSchemaDrift` |
+| CH-4 | Fixed | `validateEndpoint` rejects request URIs that contain bytes `<= 0x20` or `0x7F`. | `TestNewClientV8RejectsSpacesInRequestURI` |
+| CH-6 | Fixed | `PerformanceStatistics` is decoded as `map[string]any`. `statUint` accepts integers and finite non-negative reals; any other value maps to 0. | `TestForeignPerformanceStatisticTypeKeepsGPUParse`, `TestPerformanceStatisticTypesDegrade` |
+| CH-7 | Fixed (needs Linux compile check) | `Telemetry.MinPowerLimitW` uses `mwToWCeil`. | `TestAdvertisedMinPowerLimitIsSettable`, `TestMwToWCeil` |
+| CH-2 | Open | Still a hypothesis: the repro skips on macOS. Run it on Linux. | `TestChaosCloseDoesNotAbortInFlightDial` (`chaos` tag) |
+| CH-8, CH-9 | Accepted | Bounded behavior; no change. | none |
+| CH-10, CH-11 | Deferred | Daemon milestone (see `docs/PENDING.md`). | none |
+
+Side effect of CH-1: within one process, concurrent Pause and Resume calls now
+contradict each other until a deadline, because each one waits for its own
+state. `TestClientV8Concurrent` now runs a pause phase and then a resume phase.
+The daemon must issue one command at a time.

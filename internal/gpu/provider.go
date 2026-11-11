@@ -73,6 +73,13 @@ func mwToW(mw uint32) int {
 	return int(mw / 1000)
 }
 
+// mwToWCeil converts milliwatts to watts rounding up. It is used for minimum
+// limits: a floored minimum (123 W for 123500 mW) would advertise a value
+// that SetPowerLimit then rejects as below the real minimum.
+func mwToWCeil(mw uint32) int {
+	return int((uint64(mw) + 999) / 1000)
+}
+
 // wToMW converts watts to milliwatts. It rejects values that would overflow
 // an unsigned 32-bit integer after scaling.
 func wToMW(w int) (uint32, error) {

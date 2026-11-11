@@ -96,7 +96,7 @@ func (p *NvidiaProvider) GetTelemetry() (Telemetry, error) {
 		TempC:              int(temp),
 		PowerUsageW:        mwToW(powerUsage),
 		PowerLimitW:        mwToW(powerLimit),
-		MinPowerLimitW:     mwToW(minLimit),
+		MinPowerLimitW:     mwToWCeil(minLimit),
 		MaxPowerLimitW:     mwToW(maxLimit),
 		DefaultPowerLimitW: mwToW(defaultLimit),
 		UsedVRAMMiB:        int(bytesToMiB(mem.Used)),

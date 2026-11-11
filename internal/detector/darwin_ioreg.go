@@ -89,9 +89,11 @@ type powerDistributionPlist struct {
 type ioregGPUArray []ioregGPUNode
 
 type ioregGPUNode struct {
-	IOClass               string            `plist:"IOClass"`
-	Model                 string            `plist:"model"`
-	PerformanceStatistics map[string]uint64 `plist:"PerformanceStatistics"`
+	IOClass string `plist:"IOClass"`
+	Model   string `plist:"model"`
+	// PerformanceStatistics is decoded loosely: an entry of an unexpected type
+	// in a key EcoFold never reads must not discard the whole GPU telemetry.
+	PerformanceStatistics map[string]any `plist:"PerformanceStatistics"`
 }
 
 // endregion
@@ -187,14 +189,34 @@ func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
 
 		return GPUMetrics{
 			GPUClass:           gpuClass,
-			GPUDeviceUtilPct:   int(n.PerformanceStatistics["Device Utilization %"]),
-			GPURendererUtilPct: int(n.PerformanceStatistics["Renderer Utilization %"]),
-			GPUTilerUtilPct:    int(n.PerformanceStatistics["Tiler Utilization %"]),
-			GPUInUseMemMiB:     int(n.PerformanceStatistics["In use system memory"] / 1024 / 1024),
+			GPUDeviceUtilPct:   int(statUint(n.PerformanceStatistics, "Device Utilization %")),
+			GPURendererUtilPct: int(statUint(n.PerformanceStatistics, "Renderer Utilization %")),
+			GPUTilerUtilPct:    int(statUint(n.PerformanceStatistics, "Tiler Utilization %")),
+			GPUInUseMemMiB:     int(statUint(n.PerformanceStatistics, "In use system memory") / 1024 / 1024),
 		}, nil
 	}
 
 	return GPUMetrics{}, nil
+}
+
+// statUint returns stats[key] as an unsigned integer. Integers and finite,
+// non-negative reals are accepted; missing keys and any other type yield 0,
+// matching the "missing performance keys degrade to 0" rule.
+func statUint(stats map[string]any, key string) uint64 {
+	switch v := stats[key].(type) {
+	case uint64:
+		return v
+	case int64:
+		if v > 0 {
+			return uint64(v)
+		}
+	case float64:
+		// 2^63 keeps the conversion defined; real values are far smaller.
+		if v > 0 && v < math.MaxInt64 {
+			return uint64(v)
+		}
+	}
+	return 0
 }
 
 // decodeXMLPlist decodes an ioreg XML plist into v. Only well-formed XML with a

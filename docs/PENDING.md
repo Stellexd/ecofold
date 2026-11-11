@@ -160,3 +160,20 @@ Items are marked `[x]` when resolved. Reference the commit that fixes each item
 in the checklist entry.
 
 See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verification procedure.
+
+## Chaos pass follow-ups (see `docs/CHAOS_REPORT.md`)
+
+- [ ] **CH-2 `Close` does not abort an in-flight dial.** Run
+  `go test -tags chaos -race -run TestChaosCloseDoesNotAbortInFlightDial -v ./internal/fah`
+  on Linux. If it fails, track dials in progress, for example with a context
+  that `Close` cancels.
+- [ ] **CH-7 Linux compile check.** `nvidia_linux.go` now uses `mwToWCeil` for
+  `MinPowerLimitW`. Build and test on CachyOS with `CGO_ENABLED=1`.
+- [ ] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
+  it paused folding itself, and must not resume a pause the user made by hand.
+- [ ] **CH-11 NVML lifecycle.** Calling `Init` twice leaks an NVML reference,
+  and `Shutdown` before `Init` still calls `nvml.Shutdown`. Fix it together
+  with M3, using a single provider instance or a reference counter.
+- [ ] **Go 1.27.4.** govulncheck reports GO-2026-6859 (`net/http` server) in
+  Go 1.27.3. Only tests import `net/http` today, but upgrade both machines
+  before the daemon gains an HTTP or IPC server.
