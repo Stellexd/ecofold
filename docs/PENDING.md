@@ -163,12 +163,10 @@ See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verificatio
 
 ## Chaos pass follow-ups (see `docs/CHAOS_REPORT.md`)
 
-- [ ] **CH-2 `Close` does not abort an in-flight dial.** Run
-  `go test -tags chaos -race -run TestChaosCloseDoesNotAbortInFlightDial -v ./internal/fah`
-  on Linux. If it fails, track dials in progress, for example with a context
-  that `Close` cancels.
-- [ ] **CH-7 Linux compile check.** `nvidia_linux.go` now uses `mwToWCeil` for
-  `MinPowerLimitW`. Build and test on CachyOS with `CGO_ENABLED=1`.
+- [x] **CH-2 `Close` does not abort an in-flight dial.** Fixed with a client
+  context that `Close` cancels. Covered by `TestCloseAbortsInFlightDial`.
+- [x] **CH-7 Linux compile check.** `make test` passed on CachyOS with the
+  `mwToWCeil` change in `nvidia_linux.go` (2026-11-11).
 - [ ] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
   it paused folding itself, and must not resume a pause the user made by hand.
 - [ ] **CH-11 NVML lifecycle.** Calling `Init` twice leaks an NVML reference,

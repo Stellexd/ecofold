@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"sync"
 	"testing"
@@ -181,5 +182,35 @@ func TestCloseStopsPauseConfirmation(t *testing.T) {
 	}
 	if el := time.Since(start); el > 500*time.Millisecond {
 		t.Fatalf("Pause took %v after Close at 150ms", el)
+	}
+}
+
+// CH-2: Close must abort a call that is still dialing. The dialer blocks
+// until its ctx is done, as a SYN to a listener that drops it would.
+func TestCloseAbortsInFlightDial(t *testing.T) {
+	c, err := NewClientV8("")
+	if err != nil {
+		t.Fatalf("NewClientV8: %v", err)
+	}
+	dialing := make(chan struct{})
+	c.dial = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		close(dialing)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	go func() {
+		<-dialing
+		_ = c.Close()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err = c.GetStatus(ctx)
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("GetStatus error = %v, want ErrClosed", err)
+	}
+	if el := time.Since(start); el > 500*time.Millisecond {
+		t.Fatalf("GetStatus took %v: Close did not abort the dial", el)
 	}
 }

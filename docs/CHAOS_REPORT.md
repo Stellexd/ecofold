@@ -270,8 +270,8 @@ Run all repros: `go test -tags chaos -race -run Chaos -v ./internal/...`
 | CH-3 | Fixed | Units are decoded one by one and invalid units are skipped. The project is read as `json.Number`, so integral floats and numeric strings are accepted, and anything else maps to 0. `paused` is still strict, so the parser fails closed. | `TestPauseToleratesUnitSchemaDrift`, `TestParseFAHMessageToleratesUnitSchemaDrift` |
 | CH-4 | Fixed | `validateEndpoint` rejects request URIs that contain bytes `<= 0x20` or `0x7F`. | `TestNewClientV8RejectsSpacesInRequestURI` |
 | CH-6 | Fixed | `PerformanceStatistics` is decoded as `map[string]any`. `statUint` accepts integers and finite non-negative reals; any other value maps to 0. | `TestForeignPerformanceStatisticTypeKeepsGPUParse`, `TestPerformanceStatisticTypesDegrade` |
-| CH-7 | Fixed (needs Linux compile check) | `Telemetry.MinPowerLimitW` uses `mwToWCeil`. | `TestAdvertisedMinPowerLimitIsSettable`, `TestMwToWCeil` |
-| CH-2 | Open | Still a hypothesis: the repro skips on macOS. Run it on Linux. | `TestChaosCloseDoesNotAbortInFlightDial` (`chaos` tag) |
+| CH-7 | Fixed | `Telemetry.MinPowerLimitW` uses `mwToWCeil`. `make test` passed on CachyOS with `CGO_ENABLED=1`. | `TestAdvertisedMinPowerLimitIsSettable`, `TestMwToWCeil` |
+| CH-2 | Fixed | Every call derives its context from a client context that `Close` cancels, so a dial still in progress is aborted. The original repro also skipped on Linux: 1024 filler connections never fill a `somaxconn=4096` backlog. It was replaced by a deterministic test that uses a blocking dialer. | `TestCloseAbortsInFlightDial` |
 | CH-8, CH-9 | Accepted | Bounded behavior; no change. | none |
 | CH-10, CH-11 | Deferred | Daemon milestone (see `docs/PENDING.md`). | none |
 

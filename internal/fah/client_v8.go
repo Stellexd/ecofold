@@ -82,6 +82,11 @@ type ClientV8 struct {
 	host     string // Host header
 	path     string // request URI
 	timeout  time.Duration
+	dial     func(ctx context.Context, network, addr string) (net.Conn, error)
+
+	// done is cancelled by Close so that calls still dialing abort too.
+	done     context.Context
+	shutdown context.CancelFunc
 
 	mu     sync.Mutex
 	closed bool
@@ -101,11 +106,15 @@ func NewClientV8(endpoint string) (*ClientV8, error) {
 	if err != nil {
 		return nil, err
 	}
+	done, shutdown := context.WithCancel(context.Background())
 	return &ClientV8{
 		dialAddr: dialAddr,
 		host:     host,
 		path:     path,
 		timeout:  defaultTimeout,
+		dial:     (&net.Dialer{}).DialContext,
+		done:     done,
+		shutdown: shutdown,
 		conns:    make(map[net.Conn]struct{}),
 	}, nil
 }
@@ -196,6 +205,7 @@ func (c *ClientV8) Close() error {
 	defer c.mu.Unlock()
 
 	c.closed = true
+	c.shutdown()
 	for conn := range c.conns {
 		_ = conn.Close()
 	}
@@ -284,9 +294,14 @@ func (c *ClientV8) do(ctx context.Context, op string, fn func(*wsConn) error) er
 	ctx, cancel := c.withDefaultTimeout(ctx)
 	defer cancel()
 	deadline, _ := ctx.Deadline()
+	// Close must also abort a dial that is still in progress, before there is
+	// a connection to close.
+	ctx, abort := context.WithCancel(ctx)
+	defer abort()
+	stopAbort := context.AfterFunc(c.done, abort)
+	defer stopAbort()
 
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", c.dialAddr)
+	conn, err := c.dial(ctx, "tcp", c.dialAddr)
 	if err != nil {
 		return c.wrapErr(ctx, deadline, op, fmt.Errorf("dial %s: %w", c.dialAddr, err))
 	}
