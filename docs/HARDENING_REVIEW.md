@@ -56,71 +56,46 @@ the restore path would apply 0 W. It now returns an error instead.
 **Residual risks:** see the "Residual risks" section (R1–R4) in
 `docs/PENDING.md`. They are not repeated here.
 
-## Pending: verification on the Linux workstation (CachyOS)
+## Verification on the Linux workstation (CachyOS)
 
 `internal/gpu/nvidia_linux.go` (build tag `linux && cgo`) cannot be compiled
-on macOS. The M2 change was therefore reviewed by reading the code only. It
-must be compiled and tested on the Linux workstation before tagging.
+on macOS, so the M2 change was first reviewed by reading the code only. It was
+then compiled and tested on the Linux workstation.
 
-Hardware:
+Result (2026-11-11, on `develop` after PR #7; `fix/m1-review-hardening` was
+deleted on origin after the merge):
 
-- OS: CachyOS (Arch Linux)
-- GPU: NVIDIA RTX 5060 (default 145 W, eco 123 W)
-- Library: `libnvidia-ml.so.1`
+| Item | Value |
+| --- | --- |
+| OS | CachyOS (Arch Linux) |
+| GPU | NVIDIA RTX 5060 |
+| Driver | 620.70.06 |
+| Power limits (NVML) | Default 145 W, Min 123 W, Max 145 W |
+| `go env CGO_ENABLED` | `1` |
+| `go list -f '{{.GoFiles}}' ./internal/gpu` | lists `nvidia_linux.go`, not `stub_linux.go` |
+| `go build ./...`, `go vet ./...` | exit 0 |
+| `make test` (uncached) | exit 0, 80 PASS, 0 FAIL |
 
 Checklist:
 
-- [ ] **1. Prerequisites.** The branch must be pushed from the Mac. On CachyOS:
+- [x] **1. Check out `develop`** (`git fetch origin && git checkout develop && git pull`).
+- [x] **2. Verify the environment** (`go version`, `go env CGO_ENABLED`,
+  `ls -l /usr/lib/libnvidia-ml.so.1`, and a single manual
+  `nvidia-smi -q -d POWER` to note Default/Min/Max Power Limit; the project
+  forbids `nvidia-smi` in loops for telemetry).
+- [x] **3. Build the real provider** (`go build ./...`, `go vet ./...`,
+  `go list -f '{{.GoFiles}}' ./internal/gpu`).
+- [x] **4. Run the tests** (`make test`). The macOS-only parser and fuzz tests
+  (`darwin_ioreg*_test.go`) do not run on Linux.
+- [x] **5. Record the result** (table above).
+- [ ] **6. End-to-end NVML test.** `RestoreDefaultPowerLimit` has not been
+  exercised against real hardware yet. The opt-in test
+  `internal/gpu/nvidia_integration_linux_test.go`
+  (`//go:build linux && cgo && nvml_integration`) lowers the limit to the
+  device minimum, restores the default, and verifies both through
+  `GetTelemetry`. A cleanup always restores the default TDP. Run it as root:
 
   ```bash
-  git fetch origin && git checkout fix/m1-review-hardening && git pull
+  sudo go test -tags nvml_integration -run TestNvidiaPowerLimitRoundTrip -v ./internal/gpu
+  nvidia-smi -q -d POWER    # once, manually: Current Power Limit must be 145 W again
   ```
-
-- [ ] **2. Verify the environment.**
-
-  ```bash
-  go version
-  go env CGO_ENABLED        # must print 1
-  ls -l /usr/lib/libnvidia-ml.so.1
-  nvidia-smi -q -d POWER    # run ONCE, manually, only to note Default/Min/Max Power Limit
-  ```
-
-  The project forbids `nvidia-smi` in loops for telemetry. This single call is
-  a manual reference check, not part of the code path.
-
-- [ ] **3. Build the real provider.**
-
-  ```bash
-  go build ./...
-  go vet ./...
-  go list -f '{{.GoFiles}}' ./internal/gpu   # should list nvidia_linux.go
-  ```
-
-  This confirms that `nvidia_linux.go` compiles and `stub_linux.go` does not
-  replace it. `make build` is not enough yet: it only builds `cmd/*`, whose
-  `main` packages do not import `internal/gpu` so far.
-
-- [ ] **4. Run the tests.**
-
-  ```bash
-  make test   # equivalent to: go test -race -v ./...
-  ```
-
-  The macOS-only parser and fuzz tests (`darwin_ioreg*_test.go`) do not run on
-  Linux. `detector_test.go`, `detector_hardening_test.go` and the tests in
-  `internal/gpu` (including `TestClampMW`) do run.
-
-- [ ] **5. Record the result.** Report the `make test` output, the Go version
-  and the NVIDIA driver version. If anything fails, copy the exact error for
-  the coder.
-
-- [ ] **6. Known limitation.** There is no integration test against real NVML
-  and no daemon yet, so `RestoreDefaultPowerLimit` is not exercised end to end.
-  Recommended follow-up: add an opt-in integration test behind a build tag
-  (for example `//go:build linux && cgo && nvml_integration`), run with
-  `sudo go test -tags nvml_integration ./internal/gpu`. It should read the
-  constraints, apply 123 W, restore the default, and verify the result with
-  `GetTelemetry`.
-
-- [ ] **7. Finish.** Mark the steps above. If everything passes, the branch is
-  ready for a PR to `develop` (Squash and Merge).

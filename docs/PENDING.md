@@ -72,9 +72,10 @@ Status: pending decision.
 
 Status: the six blockers above were fixed in branch `fix/m1-review-hardening`.
 M5 was extended to also bound `SustainedTicksRequired` (`> 60` resets to the
-default), and M2 also rejects a zero maximum constraint. The M2 change has
-only been reviewed on macOS; it must be compiled and tested on Linux with
-`CGO_ENABLED=1` before tagging.
+default), and M2 also rejects a zero maximum constraint. The M2 change was
+compiled and tested on Linux with `CGO_ENABLED=1` on 2026-11-11 (see
+`docs/HARDENING_REVIEW.md`). The end-to-end NVML test of
+`RestoreDefaultPowerLimit` is still pending.
 
 ## Residual risks (non-blocking)
 
