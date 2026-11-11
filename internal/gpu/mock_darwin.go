@@ -9,7 +9,8 @@ import (
 
 // MockProvider simulates an NVIDIA GPU on Apple Silicon for development.
 type MockProvider struct {
-	mu sync.RWMutex
+	mu          sync.RWMutex
+	initialized bool
 
 	name               string
 	uuid               string
@@ -43,11 +44,17 @@ func (p *MockProvider) Init() error {
 	p.usedVRAMMiB = 512
 	p.supportsPowerLimit = false
 	p.processes = []ProcessInfo{}
+	p.initialized = true
 	return nil
 }
 
-// Shutdown is a no-op for the mock provider.
+// Shutdown marks the mock provider as uninitialized. Like NVML, every other
+// method fails until Init is called again.
 func (p *MockProvider) Shutdown() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.initialized = false
 	return nil
 }
 
@@ -56,6 +63,9 @@ func (p *MockProvider) GetTelemetry() (Telemetry, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return Telemetry{}, errNotInitialized()
+	}
 	return Telemetry{
 		Name:               p.name,
 		UUID:               p.uuid,
@@ -77,6 +87,9 @@ func (p *MockProvider) SetPowerLimit(watts int) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return errNotInitialized()
+	}
 	return fmt.Errorf("power limit not supported on this device")
 }
 
@@ -86,6 +99,9 @@ func (p *MockProvider) RestoreDefaultPowerLimit() error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return errNotInitialized()
+	}
 	return fmt.Errorf("power limit not supported on this device")
 }
 
@@ -94,6 +110,9 @@ func (p *MockProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return nil, errNotInitialized()
+	}
 	out := make([]ProcessInfo, len(p.processes))
 	copy(out, p.processes)
 	return out, nil

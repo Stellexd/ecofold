@@ -38,6 +38,12 @@ type Provider interface {
 	GetGraphicsProcesses() ([]ProcessInfo, error)
 }
 
+// errNotInitialized is returned by the simulated providers before Init and
+// after Shutdown, mirroring the NVML provider's lifecycle.
+func errNotInitialized() error {
+	return fmt.Errorf("gpu: provider not initialized")
+}
+
 // validatePowerLimit ensures watts is within the inclusive [lo, hi] range.
 func validatePowerLimit(watts, lo, hi int) error {
 	if watts < lo {

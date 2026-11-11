@@ -11,7 +11,8 @@ import (
 // (for example, cross-compilation from macOS). It mirrors the mock provider
 // contract so the package always builds, but it does not drive real hardware.
 type stubProvider struct {
-	mu sync.RWMutex
+	mu          sync.RWMutex
+	initialized bool
 
 	name               string
 	uuid               string
@@ -45,11 +46,17 @@ func (p *stubProvider) Init() error {
 	p.usedVRAMMiB = 512
 	p.supportsPowerLimit = false
 	p.processes = []ProcessInfo{}
+	p.initialized = true
 	return nil
 }
 
-// Shutdown is a no-op for the stub provider.
+// Shutdown marks the stub provider as uninitialized. Like NVML, every other
+// method fails until Init is called again.
 func (p *stubProvider) Shutdown() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.initialized = false
 	return nil
 }
 
@@ -58,6 +65,9 @@ func (p *stubProvider) GetTelemetry() (Telemetry, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return Telemetry{}, errNotInitialized()
+	}
 	return Telemetry{
 		Name:               p.name,
 		UUID:               p.uuid,
@@ -79,6 +89,9 @@ func (p *stubProvider) SetPowerLimit(watts int) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return errNotInitialized()
+	}
 	return fmt.Errorf("power limit not supported on this device")
 }
 
@@ -88,6 +101,9 @@ func (p *stubProvider) RestoreDefaultPowerLimit() error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return errNotInitialized()
+	}
 	return fmt.Errorf("power limit not supported on this device")
 }
 
@@ -96,6 +112,9 @@ func (p *stubProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if !p.initialized {
+		return nil, errNotInitialized()
+	}
 	out := make([]ProcessInfo, len(p.processes))
 	copy(out, p.processes)
 	return out, nil

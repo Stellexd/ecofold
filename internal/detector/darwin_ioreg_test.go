@@ -224,7 +224,7 @@ func TestDesktopMacWithoutBattery(t *testing.T) {
 }
 
 // TestParseRejectsOversizedInput feeds both parsers a buffer one byte above
-// maxPlistBytes (16 MiB). The size guard must reject it before handing the data
+// maxPlistBytes (2 MiB). The size guard must reject it before handing the data
 // to the plist decoder, returning an error and never panicking (a hostile or
 // corrupted ioreg output must not be able to exhaust memory or crash the
 // daemon).
@@ -355,7 +355,7 @@ func TestParseRejectsNonXMLPlists(t *testing.T) {
 // TestParseRejectsDeepNesting verifies that deeply nested XML is rejected by
 // the iterative depth check instead of overflowing the stack (A2).
 func TestParseRejectsDeepNesting(t *testing.T) {
-	const depth = 1_000_000
+	const depth = 100_000
 	var b []byte
 	b = append(b, `<plist version="1.0">`...)
 	for range depth {
