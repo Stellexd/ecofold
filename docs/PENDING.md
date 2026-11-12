@@ -130,11 +130,35 @@ Found by the adversarial test pass on `fix/m1-review-hardening`.
     and full-power states.
   - Resolution: the Linux collector reads `/proc/<pid>/comm` and `cmdline` to
     filter out the Folding@home core, client, desktop compositors, Steam,
-    browser GPU/renderer helpers, and other non-game processes. The evaluator
-    uses per-process SM utilization from NVML when available, and latches
-    `StatePausedLoad` until `CooldownTicksRequired` consecutive load-free ticks
-    elapse (clamped to [60, 90] ticks, i.e. two to three minutes at the planned
-    2 s tick). Covered by unit tests and the opt-in `nvml_integration` tests.
+    browser GPU/renderer helpers, and other non-game processes. `gamescope` is
+    deliberately kept visible because games can run inside it. The evaluator
+    uses per-process SM utilization from NVML when available, ignores global
+    utilization when `GPUProcesses` is non-nil, and latches `StatePausedLoad`
+    until `CooldownTicksRequired` consecutive load-free ticks elapse (clamped to
+    [60, 90] ticks, i.e. two to three minutes at the planned 2 s tick). If the
+    battery demands a pause while the load latch is active, `StatePausedBattery`
+    is returned instead (no cooldown). Covered by unit tests.
+
+- [ ] **M2-BLOCK per-process GPU utilization unsupported**
+  - Where: `internal/detector/linux_collector.go:Collect`.
+  - Problem: some NVIDIA drivers/ GPUs return `ERROR_NOT_SUPPORTED` for
+    `GetProcessUtilization`, so the collector cannot attribute utilization to
+    individual processes and cannot distinguish a game from Folding@home. The
+    collector now returns an explicit error when every graphics process has
+    `SMUtilValid=false`, so the caller keeps its previous decision instead of
+    falsely reporting "no load". EcoFold cannot pause on game load on those
+    systems until a fallback (e.g. a process-name heuristic or corrected
+    device-wide utilization) is implemented.
+  - Fix: implement a fallback load detector for systems without per-process
+    utilization, or document this hardware limitation and fail closed at daemon
+    startup.
+
+- [x] **M2-INTEGRATION Linux collector read-only integration test**
+  - Where: `internal/detector/linux_collector_integration_test.go`.
+  - Resolution: opt-in `nvml_integration` test that exercises the real
+    collector. It skips when there are no graphics clients and therefore does
+    not claim to verify the FahCore filter; that filter is covered by unit
+    tests.
 
 ## Deferred to the daemon milestone (M3)
 
