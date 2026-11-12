@@ -200,3 +200,54 @@ func TestGlobalMetricsStillDriveMacOSPath(t *testing.T) {
 	snap := SystemSnapshot{OnAC: true, GPUDeviceUtilPct: 60, GPUInUseMemMiB: 2048}
 	pauseFor(t, ev, snap)
 }
+
+// TestGlobalMetricsIgnoredWhenGPUProcessesPresent verifies that a non-nil
+// GPUProcesses slice disables the device-wide path. This prevents a collector
+// that also copies aggregate telemetry from pausing folding permanently while
+// only Folding@home is running.
+func TestGlobalMetricsIgnoredWhenGPUProcessesPresent(t *testing.T) {
+	ev := NewEvaluator(DefaultConfig())
+	snap := SystemSnapshot{
+		OnAC:             true,
+		GPUDeviceUtilPct: 99,
+		GPUInUseMemMiB:   4096,
+		GPUProcesses:     []gpu.ProcessInfo{}, // non-nil but empty
+	}
+	for i := 0; i < ev.cfg.SustainedTicksRequired+5; i++ {
+		if got := ev.Evaluate(snap); got == StatePausedLoad {
+			t.Fatalf("tick %d: pausó con métricas globales a pesar de GPUProcesses no nil", i+1)
+		}
+	}
+}
+
+// TestBatteryPauseTakesPrecedenceDuringCooldown verifies that if the battery
+// demands a pause while the load cooldown is active, the evaluator reports the
+// battery reason immediately, then returns to the load cooldown once the
+// battery is healthy.
+func TestBatteryPauseTakesPrecedenceDuringCooldown(t *testing.T) {
+	cfg := DefaultConfig()
+	ev := NewEvaluator(cfg)
+	game := SystemSnapshot{OnAC: true, GPUDeviceUtilPct: 90}
+	pauseFor(t, ev, game)
+
+	// Battery becomes low during the cooldown: StatePausedBattery immediately.
+	lowBattery := SystemSnapshot{HasBattery: true, OnAC: false, BatteryPct: 10, GPUProcesses: []gpu.ProcessInfo{}}
+	if got := ev.Evaluate(lowBattery); got != StatePausedBattery {
+		t.Fatalf("batería baja durante cooldown: estado = %q, se esperaba %q", got, StatePausedBattery)
+	}
+
+	// Battery recovers but load cooldown is still counting. The low-battery
+	// tick counted as the first load-free tick, so CooldownTicksRequired-2
+	// additional ticks remain paused before folding resumes.
+	healthy := SystemSnapshot{HasBattery: true, OnAC: false, BatteryPct: 80, GPUProcesses: []gpu.ProcessInfo{}}
+	pausedTicksAfterBattery := cfg.CooldownTicksRequired - 2
+	for i := 1; i <= pausedTicksAfterBattery; i++ {
+		if got := ev.Evaluate(healthy); got != StatePausedLoad {
+			t.Fatalf("healthy tick %d/%d tras recuperar batería: estado = %q, se esperaba %q",
+				i, pausedTicksAfterBattery, got, StatePausedLoad)
+		}
+	}
+	if got := ev.Evaluate(healthy); got != StateFoldingEco {
+		t.Fatalf("tras cooldown y batería sana: estado = %q, se esperaba %q", got, StateFoldingEco)
+	}
+}

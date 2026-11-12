@@ -233,13 +233,16 @@ func NewEvaluator(cfg Config) *Evaluator {
 // After a load pause, the evaluator latches the decision and keeps returning
 // StatePausedLoad until CooldownTicksRequired consecutive load-free ticks have
 // elapsed. Any load tick during the cooldown restarts it. The cooldown does not
-// delay StatePausedBattery or its recovery.
+// delay StatePausedBattery or its recovery. If the battery itself demands a
+// pause while the load latch is active, StatePausedBattery is returned instead
+// (it has no cooldown and reflects the independent, higher-priority reason).
 //
 // Evaluate is safe for concurrent use by multiple goroutines.
 func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	batteryPause := s.HasBattery && !s.OnAC && (!e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct)
 	isHighLoad := e.isHighLoad(s)
 
 	switch {
@@ -266,13 +269,19 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	}
 
 	if e.loadPaused {
+		// A current high-load tick keeps reporting the load reason even if the
+		// battery is also low. If the load is gone but the battery still demands
+		// a pause, report that independent reason instead.
+		if !isHighLoad && batteryPause {
+			return StatePausedBattery
+		}
 		return StatePausedLoad
 	}
 
+	if batteryPause {
+		return StatePausedBattery
+	}
 	if s.HasBattery && !s.OnAC {
-		if !e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct {
-			return StatePausedBattery
-		}
 		return StateFoldingEco
 	}
 
@@ -280,25 +289,28 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 }
 
 // isHighLoad reports whether the snapshot shows sustained-capable game load.
-// It must be called with e.mu held.
+// When GPUProcesses is non-nil the global device fields are ignored: the
+// collector is responsible for per-process attribution and device-wide metrics
+// are contaminated by Folding@home. When GPUProcesses is nil the macOS/global
+// path is used. It must be called with e.mu held.
 func (e *Evaluator) isHighLoad(s SystemSnapshot) bool {
 	cfg := e.cfg
-	if s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
+	if s.GPUProcesses != nil {
+		for _, proc := range s.GPUProcesses {
+			if !proc.SMUtilValid {
+				continue
+			}
+			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct {
+				return true
+			}
+			if proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
+				proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct {
+				return true
+			}
+		}
+		return false
+	}
+	return s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
 		(s.GPUInUseMemMiB >= cfg.GPUMemThresholdMiB &&
-			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct) {
-		return true
-	}
-	for _, proc := range s.GPUProcesses {
-		if !proc.SMUtilValid {
-			continue
-		}
-		if proc.SMUtilPct >= cfg.GPUUtilThresholdPct {
-			return true
-		}
-		if proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
-			proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct {
-			return true
-		}
-	}
-	return false
+			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct)
 }
