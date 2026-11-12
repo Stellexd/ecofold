@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
@@ -233,6 +234,49 @@ func TestLinuxCollectorIgnoresBrowserHelpers(t *testing.T) {
 			t.Error("el proceso principal de Chrome no debe ignorarse")
 		}
 	})
+}
+
+// TestLinuxCollectorRejectsUnsupportedUtilization verifies that when every
+// graphics process lacks per-process utilization, the collector returns an
+// explicit error instead of a false-negative "no load" snapshot.
+func TestLinuxCollectorRejectsUnsupportedUtilization(t *testing.T) {
+	prov := &fakeGPU{
+		tel: gpu.Telemetry{Name: "GPU"},
+		procs: []gpu.ProcessInfo{
+			{PID: 1, UsedVRAMMiB: 4096, SMUtilValid: false},
+			{PID: 2, UsedVRAMMiB: 2048, SMUtilValid: false},
+		},
+	}
+	c := collectorWith(prov, map[string]string{
+		procCommPath(1):    "game.exe\n",
+		procCmdlinePath(1): "/games/game.exe\x00",
+		procCommPath(2):    "other.exe\n",
+		procCmdlinePath(2): "/games/other.exe\x00",
+	})
+
+	_, err := c.Collect(context.Background())
+	if err == nil {
+		t.Fatal("se esperaba error cuando SMUtilValid=false para todos los procesos")
+	}
+	if !strings.Contains(err.Error(), "per-process GPU utilization not supported") {
+		t.Fatalf("err = %v, se esperaba 'per-process GPU utilization not supported'", err)
+	}
+}
+
+// TestLinuxCollectorAllowsEmptyProcessList verifies that an empty graphics
+// process list (no error from NVML) is reported as load-free rather than as an
+// unsupported-utilization error.
+func TestLinuxCollectorAllowsEmptyProcessList(t *testing.T) {
+	prov := &fakeGPU{tel: gpu.Telemetry{Name: "GPU"}, procs: []gpu.ProcessInfo{}}
+	c := collectorWith(prov, nil)
+
+	snap, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(snap.GPUProcesses) != 0 {
+		t.Fatalf("GPUProcesses = %+v, se esperaba vacío", snap.GPUProcesses)
+	}
 }
 
 // TestLinuxCollectorErrors verifies that provider failures and cancellation are

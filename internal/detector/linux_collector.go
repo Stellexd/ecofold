@@ -112,6 +112,19 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 		return SystemSnapshot{}, fmt.Errorf("detector: gpu processes: %w", err)
 	}
 
+	if len(procs) > 0 {
+		allInvalid := true
+		for _, proc := range procs {
+			if proc.SMUtilValid {
+				allInvalid = false
+				break
+			}
+		}
+		if allInvalid {
+			return SystemSnapshot{}, errors.New("detector: per-process GPU utilization not supported")
+		}
+	}
+
 	kept := make([]gpu.ProcessInfo, 0, len(procs))
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
