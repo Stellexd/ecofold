@@ -119,7 +119,7 @@ Found by the adversarial test pass on `fix/m1-review-hardening`.
   - Fix: cache `HasBattery` from the first successful read and treat a later
     empty result as an error.
 
-## M2: Linux per-process collector and load cooldown (this branch)
+## M2: Linux per-process collector and load cooldown (branch `fix/m1-ch11-nvml-lifecycle`)
 
 - [x] **M2 Linux per-process collector and load cooldown**
   - Where: `internal/detector/linux_collector.go`, `internal/detector/detector.go`,
