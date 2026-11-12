@@ -38,7 +38,6 @@ var DefaultIgnoredProcesses = []string{
 	"plasmashell",
 	"steam",
 	"steamwebhelper",
-	"gamescope",
 	"gamemoderun",
 	"mangohud",
 }

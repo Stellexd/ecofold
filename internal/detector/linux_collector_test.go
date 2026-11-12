@@ -185,6 +185,7 @@ func TestLinuxCollectorMatchesNamesAndArgv0(t *testing.T) {
 		{name: "prefijo FahCore", comm: "FahCore_a8\n", argv0: "/usr/bin/FahCore_a8", ignored: true},
 		{name: "argv0 distinto de comm", comm: "renamed\n", argv0: "/opt/foldingathome/fahclient", ignored: true},
 		{name: "prefijo parcial no ignorado", comm: "mangohudgame\n", argv0: "/usr/bin/mangohudgame", ignored: false},
+		{name: "gamescope no ignorado", comm: "gamescope\n", argv0: "/usr/bin/gamescope", ignored: false},
 		{name: "juego", comm: "deadlock.exe\n", argv0: "/games/deadlock.exe", ignored: false},
 	}
 	for _, tc := range cases {
