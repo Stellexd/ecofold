@@ -11,15 +11,24 @@ import (
 	"github.com/Stellexd/ecofold/internal/gpu"
 )
 
-// TestLinuxCollectorIgnoresFoldingCoreIntegration verifies that a running
-// Folding@home core is filtered out of the GPU process list. It only reads
-// telemetry and does not require root.
+// TestLinuxCollectorIgnoresFoldingCoreIntegration exercises the real Linux
+// collector against the live GPU. It skips when there are no graphics clients,
+// so it does NOT verify the FahCore filter by itself; that filter is covered by
+// unit tests.
 func TestLinuxCollectorIgnoresFoldingCoreIntegration(t *testing.T) {
 	provider := gpu.NewProvider()
 	if err := provider.Init(); err != nil {
 		t.Skipf("GPU unavailable: %v", err)
 	}
 	t.Cleanup(func() { _ = provider.Shutdown() })
+
+	raw, err := provider.GetGraphicsProcesses()
+	if err != nil {
+		t.Fatalf("GetGraphicsProcesses: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Skip("no graphics clients")
+	}
 
 	c := NewLinuxCollector(provider)
 	snap, err := c.Collect(context.Background())
@@ -30,7 +39,6 @@ func TestLinuxCollectorIgnoresFoldingCoreIntegration(t *testing.T) {
 	for _, proc := range snap.GPUProcesses {
 		comm, err := os.ReadFile(procCommPath(proc.PID))
 		if err != nil {
-			// Process exited between the GPU query and the /proc read.
 			continue
 		}
 		name := strings.ToLower(strings.TrimSpace(string(comm)))
