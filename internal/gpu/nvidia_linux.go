@@ -10,41 +10,99 @@ import (
 )
 
 // NvidiaProvider uses the NVIDIA NVML library to manage a single GPU (index 0).
+//
+// NVML is process-global: nvml.Init and nvml.Shutdown affect the whole
+// process, not one handle. The package therefore keeps a reference count so
+// several providers can coexist, the last Shutdown performs the real
+// nvml.Shutdown, and a stray Shutdown never tears NVML down under another
+// provider.
 type NvidiaProvider struct {
-	mu     sync.Mutex
-	device nvml.Device
+	mu          sync.Mutex
+	device      nvml.Device
+	initialized bool
 }
 
-// Init initializes NVML and opens GPU handle 0.
+var (
+	nvmlMu   sync.Mutex
+	nvmlRefs int
+)
+
+// acquireNVML increments the process-wide NVML reference count, initializing
+// the library on the first reference. The caller must pair it with
+// releaseNVML.
+func acquireNVML() error {
+	nvmlMu.Lock()
+	defer nvmlMu.Unlock()
+
+	if nvmlRefs > 0 {
+		nvmlRefs++
+		return nil
+	}
+	if ret := nvml.Init(); ret != nvml.SUCCESS {
+		return fmtError("nvml.Init", ret)
+	}
+	nvmlRefs = 1
+	return nil
+}
+
+// releaseNVML drops one reference and shuts NVML down when the last one goes
+// away. The count only reaches zero after a successful shutdown, so a failed
+// nvml.Shutdown can be retried by calling releaseNVML again.
+func releaseNVML() error {
+	nvmlMu.Lock()
+	defer nvmlMu.Unlock()
+
+	switch {
+	case nvmlRefs == 0:
+		return nil
+	case nvmlRefs > 1:
+		nvmlRefs--
+		return nil
+	}
+	if ret := nvml.Shutdown(); ret != nvml.SUCCESS {
+		return fmtError("nvml.Shutdown", ret)
+	}
+	nvmlRefs = 0
+	return nil
+}
+
+// Init initializes NVML and opens GPU handle 0. It is idempotent: calling it
+// on an already initialized provider is a no-op, so it never leaks an NVML
+// reference.
 func (p *NvidiaProvider) Init() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	ret := nvml.Init()
-	if ret != nvml.SUCCESS {
-		return fmtError("nvml.Init", ret)
+	if p.initialized {
+		return nil
+	}
+	if err := acquireNVML(); err != nil {
+		return err
 	}
 
 	dev, ret := nvml.DeviceGetHandleByIndex(0)
 	if ret != nvml.SUCCESS {
-		_ = nvml.Shutdown()
+		_ = releaseNVML()
 		return fmtError("nvml.DeviceGetHandleByIndex(0)", ret)
 	}
 	p.device = dev
+	p.initialized = true
 	return nil
 }
 
-// Shutdown releases NVML resources.
+// Shutdown releases the provider's NVML resources. It is idempotent and a
+// no-op before Init, so it never shuts NVML down on behalf of another
+// provider.
 func (p *NvidiaProvider) Shutdown() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	ret := nvml.Shutdown()
-	p.device = nil
-	if ret != nvml.SUCCESS {
-		return fmtError("nvml.Shutdown", ret)
+	if !p.initialized {
+		return nil
 	}
-	return nil
+	p.device = nil
+	p.initialized = false
+	return releaseNVML()
 }
 
 // GetTelemetry reads the current GPU telemetry snapshot.

@@ -30,7 +30,11 @@ type ProcessInfo struct {
 
 // Provider abstracts GPU telemetry and power limit control across platforms.
 type Provider interface {
+	// Init acquires the provider's resources. It is idempotent: calling it on
+	// an initialized provider is a no-op instead of leaking a reference.
 	Init() error
+	// Shutdown releases the provider's resources. It is idempotent and a no-op
+	// before Init.
 	Shutdown() error
 	GetTelemetry() (Telemetry, error)
 	SetPowerLimit(watts int) error

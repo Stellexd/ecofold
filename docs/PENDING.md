@@ -124,12 +124,14 @@ Found by the adversarial test pass on `fix/m1-review-hardening`.
 These items will be resolved when the daemon lifecycle and SIGTERM handling
 are designed.
 
-- [ ] **M3 NVML shutdown is process-global**
+- [x] **M3 NVML shutdown is process-global** (branch `fix/m1-ch11-nvml-lifecycle`)
   - Where: `internal/gpu/nvidia_linux.go:19-48`.
   - Problem: two `NvidiaProvider` instances interfere with each other, because
     `nvml.Shutdown` affects the whole process.
-  - Fix: add a package-level reference counter or `sync.Once`, or use a single
-    provider instance.
+  - Resolution: `acquireNVML`/`releaseNVML` keep a process-wide reference
+    count. `Init` and `Shutdown` are idempotent per provider, a stray
+    `Shutdown` before `Init` is a no-op, and only the last `Shutdown` calls
+    `nvml.Shutdown`. Covered by `internal/gpu/nvidia_lifecycle_linux_test.go`.
 
 - [ ] **M4 Mutex is held during blocking NVML calls**
   - Where: all methods in `internal/gpu/nvidia_linux.go`.
@@ -172,9 +174,10 @@ See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verificatio
   the daemon must send `Pause` regardless of `Status.State`.
 - [ ] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
   it paused folding itself, and must not resume a pause the user made by hand.
-- [ ] **CH-11 NVML lifecycle.** Calling `Init` twice leaks an NVML reference,
-  and `Shutdown` before `Init` still calls `nvml.Shutdown`. Fix it together
-  with M3, using a single provider instance or a reference counter.
+- [x] **CH-11 NVML lifecycle.** Calling `Init` twice leaked an NVML reference,
+  and `Shutdown` before `Init` still called `nvml.Shutdown`. Fixed together
+  with M3 using a process-wide reference counter plus idempotent per-provider
+  `Init`/`Shutdown`.
 - [ ] **Go 1.27.4.** govulncheck reports GO-2026-6859 (`net/http` server) in
   Go 1.27.3. Only tests import `net/http` today, but upgrade both machines
   before the daemon gains an HTTP or IPC server.
