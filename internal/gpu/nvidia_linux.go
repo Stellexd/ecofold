@@ -90,18 +90,19 @@ func (p *NvidiaProvider) GetTelemetry() (Telemetry, error) {
 		return t, fmtError("GetMemoryInfo", ret)
 	}
 
+	minW, maxW, settable := powerRangeW(minLimit, maxLimit)
 	t = Telemetry{
 		Name:               name,
 		UUID:               uuid,
 		TempC:              int(temp),
 		PowerUsageW:        mwToW(powerUsage),
 		PowerLimitW:        mwToW(powerLimit),
-		MinPowerLimitW:     mwToW(minLimit),
-		MaxPowerLimitW:     mwToW(maxLimit),
+		MinPowerLimitW:     minW,
+		MaxPowerLimitW:     maxW,
 		DefaultPowerLimitW: mwToW(defaultLimit),
 		UsedVRAMMiB:        int(bytesToMiB(mem.Used)),
 		TotalVRAMMiB:       int(bytesToMiB(mem.Total)),
-		SupportsPowerLimit: true,
+		SupportsPowerLimit: settable,
 	}
 	return t, nil
 }

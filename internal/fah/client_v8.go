@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"strconv"
@@ -48,6 +49,13 @@ const (
 	// closeDrainTimeout bounds the wait for the server's close frame.
 	closeDrainTimeout = 250 * time.Millisecond
 
+	// confirmInterval is the first pause between state reads while confirming
+	// that FAH applied a command. It doubles after each read, up to
+	// maxConfirmInterval, so an unconfirmed command opens a handful of
+	// connections instead of one every 50 ms.
+	confirmInterval    = 50 * time.Millisecond
+	maxConfirmInterval = 800 * time.Millisecond
+
 	// websocketGUID is the fixed RFC 6455 handshake GUID.
 	websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 )
@@ -77,6 +85,11 @@ type ClientV8 struct {
 	host     string // Host header
 	path     string // request URI
 	timeout  time.Duration
+	dial     func(ctx context.Context, network, addr string) (net.Conn, error)
+
+	// done is cancelled by Close so that calls still dialing abort too.
+	done     context.Context
+	shutdown context.CancelFunc
 
 	mu     sync.Mutex
 	closed bool
@@ -96,11 +109,15 @@ func NewClientV8(endpoint string) (*ClientV8, error) {
 	if err != nil {
 		return nil, err
 	}
+	done, shutdown := context.WithCancel(context.Background())
 	return &ClientV8{
 		dialAddr: dialAddr,
 		host:     host,
 		path:     path,
 		timeout:  defaultTimeout,
+		dial:     (&net.Dialer{}).DialContext,
+		done:     done,
+		shutdown: shutdown,
 		conns:    make(map[net.Conn]struct{}),
 	}, nil
 }
@@ -146,15 +163,22 @@ func validateEndpoint(endpoint string) (dialAddr, host, path string, err error) 
 	if u.Path == "" {
 		path = defaultPath
 	}
+	// net/url keeps the raw query, which may contain spaces; any byte at or
+	// below 0x20 (or DEL) would corrupt the HTTP request line.
+	if strings.ContainsFunc(path, func(r rune) bool { return r <= ' ' || r == 0x7F }) {
+		return "", "", "", errors.New("fah: endpoint path or query contains spaces or control characters")
+	}
 	return net.JoinHostPort(dialHost, port), net.JoinHostPort(hostname, port), path, nil
 }
 
-// Pause pauses folding in every resource group.
+// Pause pauses folding in every resource group. It returns nil only after a
+// fresh state snapshot confirms that FAH is paused.
 func (c *ClientV8) Pause(ctx context.Context) error {
 	return c.sendState(ctx, "pause")
 }
 
-// Resume resumes folding in every resource group.
+// Resume resumes folding in every resource group. It returns nil only after a
+// fresh state snapshot confirms that FAH is no longer paused.
 func (c *ClientV8) Resume(ctx context.Context) error {
 	return c.sendState(ctx, "fold")
 }
@@ -162,6 +186,9 @@ func (c *ClientV8) Resume(ctx context.Context) error {
 // GetStatus reads the client's state snapshot. On error the returned status
 // has State set to StateUnknown.
 func (c *ClientV8) GetStatus(ctx context.Context) (Status, error) {
+	ctx, cancel := c.withDefaultTimeout(ctx)
+	defer cancel()
+
 	var st Status
 	err := c.do(ctx, "status", func(ws *wsConn) error {
 		var err error
@@ -181,6 +208,9 @@ func (c *ClientV8) Close() error {
 	defer c.mu.Unlock()
 
 	c.closed = true
+	if c.shutdown != nil {
+		c.shutdown()
+	}
 	for conn := range c.conns {
 		_ = conn.Close()
 	}
@@ -205,7 +235,10 @@ func (c *ClientV8) sendState(ctx context.Context, state string) error {
 	if err != nil {
 		return fmt.Errorf("fah: encode command: %w", err)
 	}
-	return c.do(ctx, state, func(ws *wsConn) error {
+	ctx, cancel := c.withDefaultTimeout(ctx)
+	defer cancel()
+
+	err = c.do(ctx, state, func(ws *wsConn) error {
 		// Read the snapshot first: it proves the peer is a FAH client before
 		// any command is sent, and leaves no unread data that would turn our
 		// close into a TCP reset and drop the command on the server.
@@ -214,6 +247,49 @@ func (c *ClientV8) sendState(ctx context.Context, state string) error {
 		}
 		return ws.writeFrame(opText, cmd)
 	})
+	if err != nil {
+		return err
+	}
+	return c.confirmPaused(ctx, state, state == "pause")
+}
+
+// confirmPaused polls the state until Paused equals want or ctx expires. A
+// successful write only means the bytes reached the local socket buffer; if
+// FAH died or dropped the connection, the command was lost, and the daemon
+// must not believe folding is paused when it is not.
+func (c *ClientV8) confirmPaused(ctx context.Context, op string, want bool) error {
+	var last Status
+	var lastErr error
+	wait := confirmInterval
+	for {
+		last, lastErr = c.GetStatus(ctx)
+		if lastErr == nil && last.Paused == want {
+			return nil
+		}
+		if errors.Is(lastErr, ErrClosed) {
+			return fmt.Errorf("fah: %s not confirmed: %w", op, ErrClosed)
+		}
+		t := time.NewTimer(wait)
+		wait = min(2*wait, maxConfirmInterval)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			if lastErr != nil {
+				return fmt.Errorf("fah: %s not confirmed: %w (%v)", op, ctx.Err(), lastErr)
+			}
+			return fmt.Errorf("fah: %s not confirmed: %w (state %q)", op, ctx.Err(), last.State)
+		case <-t.C:
+		}
+	}
+}
+
+// withDefaultTimeout bounds ctx by the default timeout when the caller set
+// no deadline, so a whole call (including confirmation) stays bounded.
+func (c *ClientV8) withDefaultTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, c.timeout)
 }
 
 // do runs fn over a fresh WebSocket connection bounded by ctx (or by the
@@ -222,16 +298,22 @@ func (c *ClientV8) do(ctx context.Context, op string, fn func(*wsConn) error) er
 	if c.isClosed() {
 		return ErrClosed
 	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.timeout)
-		defer cancel()
+	if c.dial == nil || c.done == nil || c.conns == nil {
+		return errors.New("fah: ClientV8 must be created with NewClientV8")
 	}
+	ctx, cancel := c.withDefaultTimeout(ctx)
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	// Close must also abort a dial that is still in progress, before there is
+	// a connection to close.
+	ctx, abort := context.WithCancel(ctx)
+	defer abort()
+	stopAbort := context.AfterFunc(c.done, abort)
+	defer stopAbort()
 
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", c.dialAddr)
+	conn, err := c.dial(ctx, "tcp", c.dialAddr)
 	if err != nil {
-		return fmt.Errorf("fah: %s: dial %s: %w", op, c.dialAddr, err)
+		return c.wrapErr(ctx, deadline, op, fmt.Errorf("dial %s: %w", c.dialAddr, err))
 	}
 	if err := c.track(conn); err != nil {
 		_ = conn.Close()
@@ -239,7 +321,6 @@ func (c *ClientV8) do(ctx context.Context, op string, fn func(*wsConn) error) er
 	}
 	defer c.untrack(conn)
 
-	deadline, _ := ctx.Deadline()
 	_ = conn.SetDeadline(deadline)
 	// Cancellation (not only the deadline) must unblock reads and writes.
 	stop := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
@@ -254,12 +335,22 @@ func (c *ClientV8) do(ctx context.Context, op string, fn func(*wsConn) error) er
 		ws.closeGracefully(deadline)
 		return nil
 	}
+	return c.wrapErr(ctx, deadline, op, err)
+}
 
+// wrapErr attributes a failed call to Close or to ctx when they caused it.
+// The connection deadline equals the ctx deadline, so the I/O timeout can
+// fire a moment before ctx.Err() becomes non-nil; such a timeout is still
+// reported as context.DeadlineExceeded.
+func (c *ClientV8) wrapErr(ctx context.Context, deadline time.Time, op string, err error) error {
+	var ne net.Error
 	switch {
 	case c.isClosed():
 		return fmt.Errorf("fah: %s: %w", op, ErrClosed)
 	case ctx.Err() != nil:
 		return fmt.Errorf("fah: %s: %w (%v)", op, ctx.Err(), err)
+	case errors.As(err, &ne) && ne.Timeout() && !time.Now().Before(deadline):
+		return fmt.Errorf("fah: %s: %w (%v)", op, context.DeadlineExceeded, err)
 	default:
 		return fmt.Errorf("fah: %s: %w", op, err)
 	}
@@ -541,7 +632,9 @@ func (w *wsConn) closeGracefully(deadline time.Time) {
 type fahSnapshot struct {
 	Config *fahConfig          `json:"config"`
 	Groups map[string]fahGroup `json:"groups"`
-	Units  []fahUnit           `json:"units"`
+	// Units are decoded one by one so that a unit with unexpected field types
+	// is skipped instead of failing the snapshot and blocking a pause.
+	Units []json.RawMessage `json:"units"`
 }
 
 type fahConfig struct {
@@ -556,8 +649,19 @@ type fahUnit struct {
 	State       string `json:"state"`
 	PauseReason string `json:"pause_reason"`
 	Assignment  struct {
-		Project int `json:"project"`
+		Project json.Number `json:"project"`
 	} `json:"assignment"`
+}
+
+// projectID returns the unit's project as a positive int, accepting JSON
+// numbers written as integers or integral floats (18626, 18626.0) and numeric
+// strings ("18626"). Anything else yields 0.
+func (u fahUnit) projectID() int {
+	f, err := strconv.ParseFloat(u.Assignment.Project.String(), 64)
+	if err != nil || f < 1 || f > math.MaxInt32 || f != math.Trunc(f) {
+		return 0
+	}
+	return int(f)
 }
 
 // parseFAHMessage parses a FAH v8 WebSocket message into a Status. Only the
@@ -589,9 +693,13 @@ func parseFAHMessage(raw []byte) (Status, error) {
 	}
 
 	project := 0
-	for _, u := range snap.Units {
-		if u.State == "RUN" && u.PauseReason == "" && u.Assignment.Project > 0 {
-			project = u.Assignment.Project
+	for _, raw := range snap.Units {
+		var u fahUnit
+		if json.Unmarshal(raw, &u) != nil {
+			continue
+		}
+		if id := u.projectID(); u.State == "RUN" && u.PauseReason == "" && id > 0 {
+			project = id
 			break
 		}
 	}

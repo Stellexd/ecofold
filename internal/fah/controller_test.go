@@ -268,6 +268,10 @@ func TestClientV8PauseResumeStatus(t *testing.T) {
 	}
 }
 
+// TestClientV8Concurrent runs many concurrent calls in two phases. Pause and
+// Resume confirm the resulting state, so within a phase every mutating call
+// asks for the same state; mixing them would make the confirmations race each
+// other by design (the daemon issues one command at a time).
 func TestClientV8Concurrent(t *testing.T) {
 	st := &fahState{project: 18626}
 	srv := startFakeFAH(t, st.serve)
@@ -277,39 +281,48 @@ func TestClientV8Concurrent(t *testing.T) {
 	}
 	defer c.Close()
 
-	const workers, iterations = 8, 10
-	var wg sync.WaitGroup
-	errs := make(chan error, workers*iterations)
-	for w := range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			for i := range iterations {
-				var err error
-				switch (w + i) % 3 {
-				case 0:
-					err = c.Pause(ctx)
-				case 1:
-					err = c.Resume(ctx)
-				default:
-					var s Status
-					s, err = c.GetStatus(ctx)
-					if err == nil && s.State != StatePaused && s.State != StateFolding {
-						err = fmt.Errorf("unexpected state %q", s.State)
+	for _, phase := range []struct {
+		name   string
+		mutate func(context.Context) error
+		want   string
+	}{
+		{"pause", c.Pause, StatePaused},
+		{"resume", c.Resume, StateFolding},
+	} {
+		const workers, iterations = 6, 4
+		var wg sync.WaitGroup
+		errs := make(chan error, workers*iterations)
+		for w := range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				for i := range iterations {
+					var err error
+					if (w+i)%2 == 0 {
+						err = phase.mutate(ctx)
+					} else {
+						var s Status
+						s, err = c.GetStatus(ctx)
+						if err == nil && s.State != StatePaused && s.State != StateFolding {
+							err = fmt.Errorf("unexpected state %q", s.State)
+						}
+					}
+					if err != nil {
+						errs <- fmt.Errorf("%s phase: %w", phase.name, err)
 					}
 				}
-				if err != nil {
-					errs <- err
-				}
-			}
-		}()
-	}
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		t.Error(err)
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Error(err)
+		}
+		if s, err := c.GetStatus(context.Background()); err != nil || s.State != phase.want {
+			t.Fatalf("after %s phase: %+v, %v; want %s", phase.name, s, err, phase.want)
+		}
 	}
 }
 
@@ -658,7 +671,7 @@ func TestParseFAHMessage(t *testing.T) {
 			t.Errorf("parseFAHMessage(%q) error = %v, want errNotSnapshot", msg, err)
 		}
 	}
-	for _, msg := range []string{`{`, `{}`, `{"config":null}`, `{"groups":{}}`, `{"units":[{"assignment":{"project":1e999}}],"config":{}}`} {
+	for _, msg := range []string{`{`, `{}`, `{"config":null}`, `{"groups":{}}`, `{"units":"none","config":{}}`} {
 		if st, err := parseFAHMessage([]byte(msg)); err == nil || st.State != StateUnknown {
 			t.Errorf("parseFAHMessage(%q) = %+v, %v; want unknown with error", msg, st, err)
 		}
