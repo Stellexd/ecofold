@@ -26,6 +26,15 @@ type Telemetry struct {
 type ProcessInfo struct {
 	PID         uint32
 	UsedVRAMMiB uint64
+
+	// SMUtilPct is the most recent per-process SM utilization sample (0-100).
+	// It is meaningful only when SMUtilValid is true.
+	SMUtilPct int
+
+	// SMUtilValid reports whether the provider could attribute utilization to
+	// this process. False means "unknown", never "0%": callers must not treat an
+	// unsupported sample as inactivity.
+	SMUtilValid bool
 }
 
 // Provider abstracts GPU telemetry and power limit control across platforms.
