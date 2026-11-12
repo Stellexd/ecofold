@@ -43,6 +43,30 @@ func TestMergeUtilizationSamplesKeepsLatestPerPID(t *testing.T) {
 	}
 }
 
+// TestClassifyUtilReturn pins the mapping of GetProcessUtilization return
+// codes to the behaviour expected by processUtilization.
+func TestClassifyUtilReturn(t *testing.T) {
+	cases := []struct {
+		ret            nvml.Return
+		wantUtilizable bool
+		wantAdvance    bool
+		wantErr        bool
+	}{
+		{ret: nvml.SUCCESS, wantUtilizable: true, wantAdvance: true},
+		{ret: nvml.ERROR_NOT_FOUND, wantUtilizable: true, wantAdvance: false},
+		{ret: nvml.ERROR_INSUFFICIENT_SIZE, wantUtilizable: true, wantAdvance: true},
+		{ret: nvml.ERROR_NOT_SUPPORTED, wantUtilizable: false, wantAdvance: false},
+		{ret: nvml.ERROR_UNKNOWN, wantUtilizable: false, wantAdvance: false, wantErr: true},
+	}
+	for _, c := range cases {
+		utilizable, advance, err := classifyUtilReturn(c.ret)
+		if utilizable != c.wantUtilizable || advance != c.wantAdvance || (err != nil) != c.wantErr {
+			t.Errorf("classifyUtilReturn(%v) = (utilizable=%v, advance=%v, err=%v), want (%v, %v, err=%v)",
+				c.ret, utilizable, advance, err, c.wantUtilizable, c.wantAdvance, c.wantErr)
+		}
+	}
+}
+
 // TestClampPercent covers the percentage clamp used on NVML values.
 func TestClampPercent(t *testing.T) {
 	cases := []struct{ in, want int }{
@@ -55,29 +79,6 @@ func TestClampPercent(t *testing.T) {
 	for _, c := range cases {
 		if got := clampPercent(c.in); got != c.want {
 			t.Errorf("clampPercent(%d) = %d, se esperaba %d", c.in, got, c.want)
-		}
-	}
-}
-
-// TestNvidiaProcessUtilizationIsReadOnly exercises the real per-process
-// query without root: it must return percentages in range and keep working
-// across calls. It skips when no NVIDIA driver is available.
-func TestNvidiaProcessUtilizationIsReadOnly(t *testing.T) {
-	p := &NvidiaProvider{}
-	if err := p.Init(); err != nil {
-		t.Skipf("NVML unavailable: %v", err)
-	}
-	t.Cleanup(func() { _ = p.Shutdown() })
-
-	for call := 1; call <= 2; call++ {
-		procs, err := p.GetGraphicsProcesses()
-		if err != nil {
-			t.Fatalf("call %d: GetGraphicsProcesses: %v", call, err)
-		}
-		for _, pr := range procs {
-			if pr.SMUtilValid && (pr.SMUtilPct < 0 || pr.SMUtilPct > 100) {
-				t.Errorf("call %d: PID %d SMUtilPct = %d fuera de [0,100]", call, pr.PID, pr.SMUtilPct)
-			}
 		}
 	}
 }

@@ -262,26 +262,52 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	return result, nil
 }
 
+// classifyUtilReturn maps an NVML GetProcessUtilization return code to the
+// action processUtilization should take.
+//   - utilizable: the returned samples (which may be empty) can be exposed to
+//     callers as fresh measurements.
+//   - advance: the high-water timestamp may be moved forward based on the
+//     sample timestamps. It is only true for codes that return data; for
+//     ERROR_NOT_FOUND the timestamp is left unchanged so the next call still
+//     asks for fresh data, and for ERROR_NOT_SUPPORTED/errors no advancement
+//     happens at all.
+func classifyUtilReturn(ret nvml.Return) (utilizable, advance bool, err error) {
+	switch ret {
+	case nvml.SUCCESS:
+		return true, true, nil
+	case nvml.ERROR_NOT_FOUND:
+		// No fresh samples since lastSeenUtil: every process was idle in the
+		// last window. This is a successful empty result.
+		return true, false, nil
+	case nvml.ERROR_INSUFFICIENT_SIZE:
+		// NVML returned a partial sample list. Use what we got and advance the
+		// watermark only up to the newest real sample timestamp so we never
+		// fabricate an idle window.
+		return true, true, nil
+	case nvml.ERROR_NOT_SUPPORTED:
+		return false, false, nil
+	default:
+		return false, false, fmtError("GetProcessUtilization", ret)
+	}
+}
+
 // processUtilization fetches per-process SM utilization since the last call.
 // It reports utilValid=false when NVML does not support the query, so callers
 // never confuse "unsupported" with "idle".
 func (p *NvidiaProvider) processUtilization() (map[uint32]int, bool, error) {
 	samples, ret := p.device.GetProcessUtilization(p.lastSeenUtil)
-	switch ret {
-	case nvml.SUCCESS:
-		byPID, high := mergeUtilizationSamples(p.lastSeenUtil, samples)
-		if high > p.lastSeenUtil {
-			p.lastSeenUtil = high
-		}
-		return byPID, true, nil
-	case nvml.ERROR_NOT_FOUND, nvml.ERROR_INSUFFICIENT_SIZE:
-		// No fresh samples: every process was idle in the last window.
-		return nil, true, nil
-	case nvml.ERROR_NOT_SUPPORTED:
-		return nil, false, nil
-	default:
-		return nil, false, fmtError("GetProcessUtilization", ret)
+	utilizable, advance, err := classifyUtilReturn(ret)
+	if err != nil {
+		return nil, false, err
 	}
+	if !utilizable {
+		return nil, false, nil
+	}
+	byPID, high := mergeUtilizationSamples(p.lastSeenUtil, samples)
+	if advance && high > p.lastSeenUtil {
+		p.lastSeenUtil = high
+	}
+	return byPID, true, nil
 }
 
 // mergeUtilizationSamples keeps the most recent sample per PID and returns the
