@@ -7,6 +7,67 @@ explicitly decided before the `v0.0.1` tag is created on `main`.
 
 Date: 2026-11-09
 
+## Road to v0.1.0 (master checklist)
+
+Added 2026-11-12. This is the ordered plan from the current state (M1 closed,
+M2 layer 1 merged) to the `v0.1.0` public release. Tick each box in the PR that
+completes it. Items that reference an ID (CH-10, R3, …) are detailed further
+down in this file; tick both places.
+
+### 1. Daemon main loop (`cmd/ecofold-daemon`), branch `feat/m3-daemon-loop`
+
+- [ ] 2 s tick loop: `LinuxCollector.Collect` → `Evaluator.Evaluate` → apply
+  the power limit and `fah.Controller` Pause/Resume.
+- [ ] Keep the previous decision when `Collect` returns an error (never feed
+  "no load" to the evaluator).
+- [ ] Fail-safe: `signal.NotifyContext(ctx, SIGINT, SIGTERM)` and
+  `RestoreDefaultPowerLimit()` on every exit path, including panics.
+- [ ] **CH2-H1:** send `Pause` on game load even when FAH reports itself idle.
+- [ ] **CH-10:** only `Resume` a pause the daemon made itself, never a manual one.
+- [ ] **M2-BLOCK:** detect missing per-process utilization at startup and
+  report it clearly instead of failing silently.
+- [ ] systemd unit with only `CAP_SYS_ADMIN` (no full root), restart policy and
+  `ExecStopPost` that restores the default power limit.
+- [ ] End-to-end check on CachyOS: open *Deadlock* → TDP 145 W and FAH paused
+  within 2 s; close it → cooldown → 123 W and folding again.
+
+### 2. Close M2 (issue #2): Proton/Wine watcher, branch `feat/m2-proton-watcher`
+
+- [ ] Detection layer 2: `wineserver`, `reaper` and `.exe` payloads as a game
+  signal, reading `/proc` once per tick (no shell commands).
+- [ ] Share the existing cooldown latch with layer 1.
+- [ ] Calibrate the thresholds (45 % / 25 % / 1500 MiB) with real games through
+  the daemon and update `internal/detector/README.md`.
+- [ ] **R3** and **R4** decided or fixed.
+
+### 3. M3 (issue #3): IPC and GUI
+
+- [ ] Upgrade both machines and `go.mod` to Go 1.27.4 (GO-2026-6859) before any
+  socket exists.
+- [ ] Unix domain socket with restrictive permissions (owner/group only) and a
+  minimal protocol: status, force pause/resume, read/update config.
+- [ ] Add Wails to `go.mod`; system tray with state (Folding / Paused by game /
+  Battery) and current TDP. The GUI stays unprivileged.
+- [ ] GUI handles the daemon being down (shows "daemon not running", no crash).
+
+### 4. M4 (issue #4): CI, packaging and release
+
+- [ ] CI in `.github/workflows`: build, `go test -race`, `go vet` and `gofmt`
+  on Linux (CGO) and macOS. Set this up early, ideally during step 1.
+- [ ] `govulncheck` in CI.
+- [ ] AUR `PKGBUILD`: daemon, systemd unit and GUI.
+- [ ] macOS `.dmg` (telemetry + FAH control only; no TDP on Apple Silicon).
+- [ ] README with install, permissions and known limitations.
+- [ ] Tag `v0.1.0` on `main` once every box above is ticked.
+
+### Housekeeping (any time)
+
+- [ ] Publish the FAH container on `127.0.0.1:7396:7396` instead of
+  `0.0.0.0:7396` (see "FAH API exposed on the LAN" below).
+- [ ] Delete merged branches (`test/m1-chaos*`, `test/m1-nvml-integration`,
+  `revert-8-test/m1-nvml-integration`) and the agent worktrees in
+  `.claude/worktrees/`.
+
 ## Open decision: v0.0.1 scope
 
 `docs/ROADMAP.md` defines Milestone 1 (`v0.0.1`) as "GPU Provider Interface
