@@ -119,6 +119,23 @@ Found by the adversarial test pass on `fix/m1-review-hardening`.
   - Fix: cache `HasBattery` from the first successful read and treat a later
     empty result as an error.
 
+## M2: Linux per-process collector and load cooldown (this branch)
+
+- [x] **M2 Linux per-process collector and load cooldown**
+  - Where: `internal/detector/linux_collector.go`, `internal/detector/detector.go`,
+    `internal/gpu/nvidia_linux.go`, `internal/gpu/provider.go`.
+  - Problem: Folding@home keeps the GPU at high device-wide utilization and
+    memory use, so aggregate metrics would pause folding permanently. Resuming
+    the instant a game releases the GPU also causes oscillation between folding
+    and full-power states.
+  - Resolution: the Linux collector reads `/proc/<pid>/comm` and `cmdline` to
+    filter out the Folding@home core, client, desktop compositors, Steam,
+    browser GPU/renderer helpers, and other non-game processes. The evaluator
+    uses per-process SM utilization from NVML when available, and latches
+    `StatePausedLoad` until `CooldownTicksRequired` consecutive load-free ticks
+    elapse (clamped to [60, 90] ticks, i.e. two to three minutes at the planned
+    2 s tick). Covered by unit tests and the opt-in `nvml_integration` tests.
+
 ## Deferred to the daemon milestone (M3)
 
 These items will be resolved when the daemon lifecycle and SIGTERM handling

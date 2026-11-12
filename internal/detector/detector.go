@@ -5,7 +5,11 @@
 // between Linux and macOS, while telemetry collection is separated by build tags.
 package detector
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/Stellexd/ecofold/internal/gpu"
+)
 
 // OperatingState represents the control decision EcoFold should apply.
 type OperatingState string
@@ -61,12 +65,28 @@ type Config struct {
 	// required to declare StatePausedLoad. Default: 3. The evaluator rejects
 	// values less than or equal to 0 or greater than 60.
 	SustainedTicksRequired int
+
+	// CooldownTicksRequired is the number of consecutive load-free measurements
+	// required before folding resumes after StatePausedLoad. It is the hysteresis
+	// that stops folding from resuming the second a game releases the GPU.
+	// Default: 60 (two minutes at the documented 2 s tick). Values below 60 are
+	// raised to 60 and values above 90 are clamped to 90, so the cooldown is
+	// always between two and three minutes; it cannot be disabled through this
+	// field.
+	CooldownTicksRequired int
 }
 
 // maxSustainedTicksRequired bounds SustainedTicksRequired. At one evaluation
 // per second it is one minute of sustained load; larger values would make the
 // pause effectively unreachable.
 const maxSustainedTicksRequired = 60
+
+// Cooldown bounds. The daemon ticks every 2 s, so [60,90] ticks is the
+// documented two-to-three-minute cooldown.
+const (
+	minCooldownTicksRequired = 60
+	maxCooldownTicksRequired = 90
+)
 
 // DefaultConfig returns the configuration with the documented default values.
 func DefaultConfig() Config {
@@ -77,6 +97,7 @@ func DefaultConfig() Config {
 		GPUMemThresholdMiB:     1500,
 		GPUMemRequiresUtilPct:  25,
 		SustainedTicksRequired: 3,
+		CooldownTicksRequired:  60,
 	}
 }
 
@@ -134,6 +155,16 @@ type SystemSnapshot struct {
 
 	// GPUInUseMemMiB is the system memory in use by the GPU, in MiB.
 	GPUInUseMemMiB int
+
+	// GPUProcesses lists per-process GPU activity when the platform can
+	// attribute it (Linux/NVML). It is nil on platforms that only report
+	// device-wide metrics, and the evaluator then falls back to the global
+	// fields above.
+	//
+	// On Linux the collector must leave GPUDeviceUtilPct and GPUInUseMemMiB at
+	// zero: the Folding@home core keeps the device busy, so those aggregates are
+	// contaminated and would pause folding permanently.
+	GPUProcesses []gpu.ProcessInfo
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
@@ -143,6 +174,8 @@ type SystemSnapshot struct {
 type Evaluator struct {
 	mu             sync.Mutex
 	highLoadStreak int
+	lowLoadStreak  int
+	loadPaused     bool
 	cfg            Config
 }
 
@@ -152,7 +185,8 @@ type Evaluator struct {
 // would disable load pausing); GPUMemThresholdMiB <= 0 is forced to 1500;
 // SustainedTicksRequired <= 0 or > 60 is forced to 3; GPUMemRequiresUtilPct below 25 or
 // greater than GPUUtilThresholdPct is forced to 25 (never below 25);
-// MinBatteryPct < 0 or > 100 is forced to 50.
+// MinBatteryPct < 0 or > 100 is forced to 50; CooldownTicksRequired below 60 is
+// raised to 60 and above 90 is clamped to 90.
 //
 // AllowBatteryFolding's zero value (false) is intentional and conservative: a
 // Config{} never folds on battery; callers that want true must start from
@@ -173,6 +207,12 @@ func NewEvaluator(cfg Config) *Evaluator {
 	if cfg.MinBatteryPct < 0 || cfg.MinBatteryPct > 100 {
 		cfg.MinBatteryPct = DefaultConfig().MinBatteryPct
 	}
+	if cfg.CooldownTicksRequired < minCooldownTicksRequired {
+		cfg.CooldownTicksRequired = DefaultConfig().CooldownTicksRequired
+	}
+	if cfg.CooldownTicksRequired > maxCooldownTicksRequired {
+		cfg.CooldownTicksRequired = maxCooldownTicksRequired
+	}
 	return &Evaluator{cfg: cfg}
 }
 
@@ -180,33 +220,52 @@ func NewEvaluator(cfg Config) *Evaluator {
 // priority logic is:
 //
 //  1. Sustained GPU game load → StatePausedLoad.
-//     Load is detected if overall utilization meets or exceeds the
-//     threshold, or if in-use memory meets or exceeds its threshold AND
-//     overall utilization meets or exceeds GPUMemRequiresUtilPct. This
-//     avoids false positives from occupied unified memory while the GPU is
-//     idle.
+//     Load is detected per process when GPUProcesses is populated (Linux):
+//     a process counts if its own SM utilization meets or exceeds the
+//     threshold, or if its own in-use memory meets the memory threshold AND
+//     its own utilization meets GPUMemRequiresUtilPct. Memory from one process
+//     is never combined with another process's utilization. When GPUProcesses
+//     is nil, the device-wide fields are used with the same rule.
 //  2. Low battery or battery folding disabled → StatePausedBattery.
 //  3. On battery with sufficient charge and folding allowed → StateFoldingEco.
 //  4. Any other case → StateFolding.
+//
+// After a load pause, the evaluator latches the decision and keeps returning
+// StatePausedLoad until CooldownTicksRequired consecutive load-free ticks have
+// elapsed. Any load tick during the cooldown restarts it. The cooldown does not
+// delay StatePausedBattery or its recovery.
 //
 // Evaluate is safe for concurrent use by multiple goroutines.
 func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	isHighLoad := s.GPUDeviceUtilPct >= e.cfg.GPUUtilThresholdPct ||
-		(s.GPUInUseMemMiB >= e.cfg.GPUMemThresholdMiB &&
-			s.GPUDeviceUtilPct >= e.cfg.GPUMemRequiresUtilPct)
+	isHighLoad := e.isHighLoad(s)
 
-	if isHighLoad {
+	switch {
+	case isHighLoad:
+		e.lowLoadStreak = 0
 		if e.highLoadStreak < e.cfg.SustainedTicksRequired {
 			e.highLoadStreak++
 		}
-	} else {
+		if e.highLoadStreak >= e.cfg.SustainedTicksRequired {
+			e.loadPaused = true
+		}
+	case e.loadPaused:
 		e.highLoadStreak = 0
+		if e.lowLoadStreak < e.cfg.CooldownTicksRequired {
+			e.lowLoadStreak++
+		}
+		if e.lowLoadStreak >= e.cfg.CooldownTicksRequired {
+			e.loadPaused = false
+			e.lowLoadStreak = 0
+		}
+	default:
+		e.highLoadStreak = 0
+		e.lowLoadStreak = 0
 	}
 
-	if e.highLoadStreak >= e.cfg.SustainedTicksRequired {
+	if e.loadPaused {
 		return StatePausedLoad
 	}
 
@@ -218,4 +277,28 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	}
 
 	return StateFolding
+}
+
+// isHighLoad reports whether the snapshot shows sustained-capable game load.
+// It must be called with e.mu held.
+func (e *Evaluator) isHighLoad(s SystemSnapshot) bool {
+	cfg := e.cfg
+	if s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
+		(s.GPUInUseMemMiB >= cfg.GPUMemThresholdMiB &&
+			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct) {
+		return true
+	}
+	for _, proc := range s.GPUProcesses {
+		if !proc.SMUtilValid {
+			continue
+		}
+		if proc.SMUtilPct >= cfg.GPUUtilThresholdPct {
+			return true
+		}
+		if proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
+			proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct {
+			return true
+		}
+	}
+	return false
 }

@@ -380,11 +380,13 @@ func TestHighLoadStreakIntegerOverflow(t *testing.T) {
 			streak, ticks, cfg.SustainedTicksRequired)
 	}
 
-	// Regression: after the saturated streak, a single idle tick must still reset
-	// the counter and return to normal folding.
-	if got := ev.Evaluate(idleDesktopSnapshot()); got != StateFolding {
-		t.Fatalf("tick en reposo tras %d ticks de carga: Evaluate = %q, se esperaba %q (reset de racha roto)",
-			ticks, got, StateFolding)
+	// Regression: the first idle tick must reset the high-load streak but keep
+	// the pause latched for the cooldown. Folding only resumes after
+	// CooldownTicksRequired consecutive load-free ticks.
+	idle := idleDesktopSnapshot()
+	if got := ev.Evaluate(idle); got != StatePausedLoad {
+		t.Fatalf("primer tick en reposo tras %d ticks de carga: Evaluate = %q, se esperaba %q (cooldown)",
+			ticks, got, StatePausedLoad)
 	}
 
 	ev.mu.Lock()
@@ -392,6 +394,17 @@ func TestHighLoadStreakIntegerOverflow(t *testing.T) {
 	ev.mu.Unlock()
 	if streakAfterIdle != 0 {
 		t.Errorf("highLoadStreak = %d tras el tick en reposo, se esperaba 0", streakAfterIdle)
+	}
+
+	for i := 0; i < cfg.CooldownTicksRequired-2; i++ {
+		if got := ev.Evaluate(idle); got != StatePausedLoad {
+			t.Fatalf("tick %d/%d del cooldown: Evaluate = %q, se esperaba %q",
+				i+2, cfg.CooldownTicksRequired, got, StatePausedLoad)
+		}
+	}
+	if got := ev.Evaluate(idle); got != StateFolding {
+		t.Fatalf("tras %d ticks de cooldown: Evaluate = %q, se esperaba %q",
+			cfg.CooldownTicksRequired, got, StateFolding)
 	}
 }
 
