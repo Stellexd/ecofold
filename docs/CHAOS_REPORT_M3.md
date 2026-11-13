@@ -79,7 +79,7 @@ and resume it after cooldown. Writing there requires root (the dir is
 ## 4. Not covered
 
 - The systemd unit (`CAP_SYS_ADMIN`, `ExecStopPost` after SIGKILL): needs root
-  on CachyOS; it is step 1 of "Next steps" in `PENDING.md`.
+  on CachyOS; it is step 1 of "Road to v0.1.0" in `PENDING.md`.
 - A real hung NVML call (M4): still not reproducible without a faulty driver.
   The bounded restore is covered by `TestRunBoundsHungRestore` with a fake.
 - Oscillation around the load thresholds is covered by the evaluator's own
