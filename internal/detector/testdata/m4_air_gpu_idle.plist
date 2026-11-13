@@ -1,0 +1,3991 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>AGCInfo</key>
+		<dict>
+			<key>fBusyCount</key>
+			<integer>0</integer>
+			<key>fLastSubmissionPID</key>
+			<integer>50256</integer>
+			<key>fSubmissionsSinceLastCheck</key>
+			<integer>0</integer>
+		</dict>
+		<key>AGXParameterBufferMaxSize</key>
+		<integer>862322688</integer>
+		<key>AGXParameterBufferMaxSizeEverMemless</key>
+		<integer>574881792</integer>
+		<key>AGXParameterBufferMaxSizeNeverMemless</key>
+		<integer>287440896</integer>
+		<key>AGXTraceCodeVersion</key>
+		<string>3.44.12</string>
+		<key>CFBundleIdentifier</key>
+		<string>com.apple.AGXG16G</string>
+		<key>CFBundleIdentifierKernel</key>
+		<string>com.apple.AGXG16G</string>
+		<key>CommandSubmissionEnabled</key>
+		<true/>
+		<key>GPUConfigurationVariable</key>
+		<dict>
+			<key>core_mask_list</key>
+			<array>
+				<integer>957</integer>
+			</array>
+			<key>gpu_gen</key>
+			<integer>16</integer>
+			<key>gpu_var</key>
+			<string>G</string>
+			<key>is_sksm</key>
+			<integer>0</integer>
+			<key>num_cores</key>
+			<integer>10</integer>
+			<key>num_frags</key>
+			<integer>10</integer>
+			<key>num_gps</key>
+			<integer>4</integer>
+			<key>num_mgpus</key>
+			<integer>1</integer>
+			<key>usc_gen</key>
+			<integer>3</integer>
+		</dict>
+		<key>GPURawCounterBundleName</key>
+		<string>AGXGPURawCounterBundle</string>
+		<key>GPURawCounterPluginClassName</key>
+		<string>AGXGPURawCounterSourceGroup</string>
+		<key>IOClass</key>
+		<string>AGXAcceleratorG16G</string>
+		<key>IOGLBundleName</key>
+		<string>AppleMetalOpenGLRenderer</string>
+		<key>IOGLESBundleName</key>
+		<string>AppleMetalGLRenderer</string>
+		<key>IOGeneralInterest</key>
+		<string>IOCommand is not serializable</string>
+		<key>IOMatchCategory</key>
+		<string>IOAccelerator</string>
+		<key>IOMatchedAtBoot</key>
+		<true/>
+		<key>IONameMatch</key>
+		<array>
+			<string>gpu,t8015</string>
+			<string>gpu,t8027</string>
+			<string>gpu,t8030</string>
+			<string>gpu,t8103</string>
+			<string>gpu,t8122</string>
+			<string>gpu,t8132</string>
+		</array>
+		<key>IONameMatched</key>
+		<string>gpu,t8132</string>
+		<key>IOObjectClass</key>
+		<string>AGXAcceleratorG16G</string>
+		<key>IOObjectRetainCount</key>
+		<integer>72</integer>
+		<key>IOPersonalityPublisher</key>
+		<string>com.apple.AGXG16G</string>
+		<key>IOPowerManagement</key>
+		<dict>
+			<key>CapabilityFlags</key>
+			<integer>2</integer>
+			<key>CurrentPowerState</key>
+			<integer>1</integer>
+			<key>DriverPowerState</key>
+			<integer>1</integer>
+			<key>MaxPowerState</key>
+			<integer>1</integer>
+		</dict>
+		<key>IOProbeScore</key>
+		<integer>10000</integer>
+		<key>IOProviderClass</key>
+		<string>AppleARMIODevice</string>
+		<key>IORegistryEntryID</key>
+		<integer>4294968614</integer>
+		<key>IORegistryEntryName</key>
+		<string>AGXAcceleratorG16G</string>
+		<key>IOReportLegend</key>
+		<array>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>1</integer>
+						<integer>6442450945</integer>
+						<string>Alloc system memory</string>
+					</array>
+					<array>
+						<integer>2</integer>
+						<integer>6442450945</integer>
+						<string>In use system memory</string>
+					</array>
+					<array>
+						<integer>3</integer>
+						<integer>6442450945</integer>
+						<string>GPU Restart Count</string>
+					</array>
+					<array>
+						<integer>4</integer>
+						<integer>6442450945</integer>
+						<string>In use system memory (driver)</string>
+					</array>
+					<array>
+						<integer>5</integer>
+						<integer>6442450945</integer>
+						<string>Last GPU Restart</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>Internal Statistics</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>216173288919924736</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>76202472785753</integer>
+						<integer>4295098369</integer>
+						<string>GPU Energy</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>Energy Model</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>387877586224</integer>
+						<integer>6442450945</integer>
+						<string>GPU Power Zone Filter 0</string>
+					</array>
+					<array>
+						<integer>387877586225</integer>
+						<integer>6442450945</integer>
+						<string>GPU Power Zone Filter 1</string>
+					</array>
+					<array>
+						<integer>387877586226</integer>
+						<integer>6442450945</integer>
+						<string>GPU Power Zone Filter 2</string>
+					</array>
+					<array>
+						<integer>387877586227</integer>
+						<integer>6442450945</integer>
+						<string>GPU Power Zone Filter 3</string>
+					</array>
+					<array>
+						<integer>387877586228</integer>
+						<integer>6442450945</integer>
+						<string>GPU Power Zone Filter 4</string>
+					</array>
+					<array>
+						<integer>77280627148114</integer>
+						<integer>6442450945</integer>
+						<string>GPU Power Filter</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Power Zone Filters</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>10</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6072344679969803520</integer>
+						<integer>4295098369</integer>
+						<string>Average Sum</string>
+					</array>
+					<array>
+						<integer>6072344679700911104</integer>
+						<integer>4295098369</integer>
+						<string>Average Sum Count</string>
+					</array>
+					<array>
+						<integer>6072344679868354048</integer>
+						<integer>4295098369</integer>
+						<string>Min</string>
+					</array>
+					<array>
+						<integer>6072344679867832320</integer>
+						<integer>4295098369</integer>
+						<string>Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171376</integer>
+						<integer>4295098369</integer>
+						<string>Tg0a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329712</integer>
+						<integer>4295098369</integer>
+						<string>Tg0a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720624</integer>
+						<integer>4295098369</integer>
+						<string>Tg0a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732720</integer>
+						<integer>4295098369</integer>
+						<string>Tg0a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766512</integer>
+						<integer>4295098369</integer>
+						<string>Tg0a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171379</integer>
+						<integer>4295098369</integer>
+						<string>Tg3a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329715</integer>
+						<integer>4295098369</integer>
+						<string>Tg3a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720627</integer>
+						<integer>4295098369</integer>
+						<string>Tg3a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732723</integer>
+						<integer>4295098369</integer>
+						<string>Tg3a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766515</integer>
+						<integer>4295098369</integer>
+						<string>Tg3a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171380</integer>
+						<integer>4295098369</integer>
+						<string>Tg4a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329716</integer>
+						<integer>4295098369</integer>
+						<string>Tg4a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720628</integer>
+						<integer>4295098369</integer>
+						<string>Tg4a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732724</integer>
+						<integer>4295098369</integer>
+						<string>Tg4a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766516</integer>
+						<integer>4295098369</integer>
+						<string>Tg4a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171381</integer>
+						<integer>4295098369</integer>
+						<string>Tg5a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329717</integer>
+						<integer>4295098369</integer>
+						<string>Tg5a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720629</integer>
+						<integer>4295098369</integer>
+						<string>Tg5a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732725</integer>
+						<integer>4295098369</integer>
+						<string>Tg5a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766517</integer>
+						<integer>4295098369</integer>
+						<string>Tg5a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171382</integer>
+						<integer>4295098369</integer>
+						<string>Tg6a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329718</integer>
+						<integer>4295098369</integer>
+						<string>Tg6a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720630</integer>
+						<integer>4295098369</integer>
+						<string>Tg6a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732726</integer>
+						<integer>4295098369</integer>
+						<string>Tg6a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766518</integer>
+						<integer>4295098369</integer>
+						<string>Tg6a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171384</integer>
+						<integer>4295098369</integer>
+						<string>Tg8a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329720</integer>
+						<integer>4295098369</integer>
+						<string>Tg8a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720632</integer>
+						<integer>4295098369</integer>
+						<string>Tg8a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732728</integer>
+						<integer>4295098369</integer>
+						<string>Tg8a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766520</integer>
+						<integer>4295098369</integer>
+						<string>Tg8a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171385</integer>
+						<integer>4295098369</integer>
+						<string>Tg9a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329721</integer>
+						<integer>4295098369</integer>
+						<string>Tg9a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720633</integer>
+						<integer>4295098369</integer>
+						<string>Tg9a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732729</integer>
+						<integer>4295098369</integer>
+						<string>Tg9a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766521</integer>
+						<integer>4295098369</integer>
+						<string>Tg9a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171633</integer>
+						<integer>4295098369</integer>
+						<string>Tg11a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329969</integer>
+						<integer>4295098369</integer>
+						<string>Tg11a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720881</integer>
+						<integer>4295098369</integer>
+						<string>Tg11a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732977</integer>
+						<integer>4295098369</integer>
+						<string>Tg11a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766769</integer>
+						<integer>4295098369</integer>
+						<string>Tg11a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171635</integer>
+						<integer>4295098369</integer>
+						<string>Tg13a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329971</integer>
+						<integer>4295098369</integer>
+						<string>Tg13a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720883</integer>
+						<integer>4295098369</integer>
+						<string>Tg13a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732979</integer>
+						<integer>4295098369</integer>
+						<string>Tg13a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766771</integer>
+						<integer>4295098369</integer>
+						<string>Tg13a Max</string>
+					</array>
+					<array>
+						<integer>5572152672691171636</integer>
+						<integer>4295098369</integer>
+						<string>Tg14a Latest</string>
+					</array>
+					<array>
+						<integer>5572170264793329972</integer>
+						<integer>4295098369</integer>
+						<string>Tg14a Sum</string>
+					</array>
+					<array>
+						<integer>5572170264797720884</integer>
+						<integer>4295098369</integer>
+						<string>Tg14a Sum Count</string>
+					</array>
+					<array>
+						<integer>5572163616200732980</integer>
+						<integer>4295098369</integer>
+						<string>Tg14a Min</string>
+					</array>
+					<array>
+						<integer>5572163582008766772</integer>
+						<integer>4295098369</integer>
+						<string>Tg14a Max</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Temperature</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>306290446408</integer>
+						<integer>68719607810</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GPU Performance States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4703537378684392517</integer>
+						<integer>68719607810</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>AFR Performance States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4779256294837407816</integer>
+						<integer>68719607810</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GPU Boost Controller Performance States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5138701042738200576</integer>
+						<integer>68719607810</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GPU Software Performance States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>77263479784786</integer>
+						<integer>8590065666</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Fender State</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>20073050495403080</integer>
+						<integer>47244771330</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>DVD Request States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5138701042469065805</integer>
+						<integer>73014575106</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>CLTM-induced GPU Performance States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					YAkAAAAAAAAAAAAABAAAAOAuAAAAAAAAAQAA
+					ACIAAACAcwwAAAAAAAIAAAAQAAAA
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>20073050445935688</integer>
+						<integer>231928365059</integer>
+						<string>GPU Active Time</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Active Time Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					YAkAAAAAAAAAAAAABAAAAOAuAAAAAAAAAQAA
+					ACIAAACAcwwAAAAAAAIAAAAQAAAA
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>20073050580216904</integer>
+						<integer>231928365059</integer>
+						<string>GPU Idle Time</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Idle Time Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					YAkAAAAAAAAAAAAABAAAAOAuAAAAAAAAAQAA
+					ACIAAACAcwwAAAAAAAIAAAAQAAAA
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5066061750913430600</integer>
+						<integer>231928365059</integer>
+						<string>Fender Active Time</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Fender Active Time Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					YAkAAAAAAAAAAAAABAAAAOAuAAAAAAAAAQAA
+					ACIAAACAcwwAAAAAAAIAAAAQAAAA
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5066061751047711816</integer>
+						<integer>231928365059</integer>
+						<string>Fender Idle Time</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Fender Idle Time Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>24020220114194004</integer>
+						<integer>4295098369</integer>
+						<string>UVWarn Instances</string>
+					</array>
+					<array>
+						<integer>6149174098653697605</integer>
+						<integer>4295098369</integer>
+						<string>UVWarn Active</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>UV Warn State</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6071207797712835632</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 0 (&lt;100us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835633</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 1 (&lt;200us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835634</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 2 (&lt;300us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835635</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 3 (&lt;400us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835636</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 4 (&lt;500us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835637</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 5 (&lt;1000us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835638</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 6 (&lt;2000us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835639</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 7 (&lt;4000us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835640</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 8 (&lt;10000us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835641</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 9 (&lt;20000us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835649</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket 10 (&lt;40000us)</string>
+					</array>
+					<array>
+						<integer>6071207797712835584</integer>
+						<integer>4311744513</integer>
+						<string>TA CtxSwitch Latency Histogram Bucket Max (&gt;=40000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345712</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 0 (&lt;100us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345713</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 1 (&lt;200us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345714</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 2 (&lt;300us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345715</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 3 (&lt;400us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345716</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 4 (&lt;500us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345717</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 5 (&lt;1000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345718</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 6 (&lt;2000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345719</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 7 (&lt;4000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345720</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 8 (&lt;10000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345721</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 9 (&lt;20000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345729</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket 10 (&lt;40000us)</string>
+					</array>
+					<array>
+						<integer>3694151619391345664</integer>
+						<integer>4311744513</integer>
+						<string>3D CtxSwitch Latency Histogram Bucket Max (&gt;=40000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877936</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 0 (&lt;100us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877937</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 1 (&lt;200us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877938</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 2 (&lt;300us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877939</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 3 (&lt;400us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877940</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 4 (&lt;500us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877941</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 5 (&lt;1000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877942</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 6 (&lt;2000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877943</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 7 (&lt;4000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877944</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 8 (&lt;10000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877945</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 9 (&lt;20000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877953</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket 10 (&lt;40000us)</string>
+					</array>
+					<array>
+						<integer>4849324923811877888</integer>
+						<integer>4311744513</integer>
+						<string>CL CtxSwitch Latency Histogram Bucket Max (&gt;=40000us)</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Context Switch Latencies</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6073189169021277270</integer>
+						<integer>4311744513</integer>
+						<string>THM Activation Count</string>
+					</array>
+					<array>
+						<integer>6000559781826613811</integer>
+						<integer>4311744513</integer>
+						<string>SFE Tier3 Count</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>THM Counters</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5789186286247105619</integer>
+						<integer>4295098369</integer>
+						<string>GPU Off Abort Counter</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Off Abort Counter</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5928236105841398868</integer>
+						<integer>4311744513</integer>
+						<string>Total Restarts</string>
+					</array>
+					<array>
+						<integer>5928236105841398869</integer>
+						<integer>4311744513</integer>
+						<string>Unknown Restarts</string>
+					</array>
+					<array>
+						<integer>5571873383924453956</integer>
+						<integer>4311744513</integer>
+						<string>mediaserverd Restarts</string>
+					</array>
+					<array>
+						<integer>5932177713106399795</integer>
+						<integer>4311744513</integer>
+						<string>36223</string>
+					</array>
+					<array>
+						<integer>5932177717317873977</integer>
+						<integer>4311744513</integer>
+						<string>41819</string>
+					</array>
+					<array>
+						<integer>5932177717334651442</integer>
+						<integer>4311744513</integer>
+						<string>42822</string>
+					</array>
+					<array>
+						<integer>75098766265420</integer>
+						<integer>4311744513</integer>
+						<string>DM Kill Count</string>
+					</array>
+					<array>
+						<integer>20077427183668300</integer>
+						<integer>4311744513</integer>
+						<string>GTP Kill Count</string>
+					</array>
+					<array>
+						<integer>19793714528996428</integer>
+						<integer>4311744513</integer>
+						<string>FRG Kill Count</string>
+					</array>
+					<array>
+						<integer>18933922205879372</integer>
+						<integer>4311744513</integer>
+						<string>CDM Kill Count</string>
+					</array>
+					<array>
+						<integer>21749771400202572</integer>
+						<integer>4311744513</integer>
+						<string>Memless Render Failed</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Issue Counts</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5139821406163519308</integer>
+						<integer>4311744513</integer>
+						<string>GTP Single</string>
+					</array>
+					<array>
+						<integer>5139821406162535760</integer>
+						<integer>4311744513</integer>
+						<string>GTP Dependent</string>
+					</array>
+					<array>
+						<integer>5139821406162863180</integer>
+						<integer>4311744513</integer>
+						<string>GTP Idle</string>
+					</array>
+					<array>
+						<integer>5139821406162340940</integer>
+						<integer>4311744513</integer>
+						<string>GTP Alloc New</string>
+					</array>
+					<array>
+						<integer>5139821406163455556</integer>
+						<integer>4311744513</integer>
+						<string>GTP Round robin</string>
+					</array>
+					<array>
+						<integer>5067190966567520076</integer>
+						<integer>4311744513</integer>
+						<string>FRG Single</string>
+					</array>
+					<array>
+						<integer>5067190966566536528</integer>
+						<integer>4311744513</integer>
+						<string>FRG Dependent</string>
+					</array>
+					<array>
+						<integer>5067190966566863948</integer>
+						<integer>4311744513</integer>
+						<string>FRG Idle</string>
+					</array>
+					<array>
+						<integer>5067190966566341708</integer>
+						<integer>4311744513</integer>
+						<string>FRG Alloc New</string>
+					</array>
+					<array>
+						<integer>5067190966567456324</integer>
+						<integer>4311744513</integer>
+						<string>FRG Round robin</string>
+					</array>
+					<array>
+						<integer>4847084131849553740</integer>
+						<integer>4311744513</integer>
+						<string>CDM Single</string>
+					</array>
+					<array>
+						<integer>4847084131848570192</integer>
+						<integer>4311744513</integer>
+						<string>CDM Dependent</string>
+					</array>
+					<array>
+						<integer>4847084131848897612</integer>
+						<integer>4311744513</integer>
+						<string>CDM Idle</string>
+					</array>
+					<array>
+						<integer>4847084131848375372</integer>
+						<integer>4311744513</integer>
+						<string>CDM Alloc New</string>
+					</array>
+					<array>
+						<integer>4847084131849489988</integer>
+						<integer>4311744513</integer>
+						<string>CDM Round robin</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>vChannel Selection</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5139821241828376576</integer>
+						<integer>4311744513</integer>
+						<string>Channel 0</string>
+					</array>
+					<array>
+						<integer>5139821246123343872</integer>
+						<integer>4311744513</integer>
+						<string>Channel 1</string>
+					</array>
+					<array>
+						<integer>5139821250418311168</integer>
+						<integer>4311744513</integer>
+						<string>Channel 2</string>
+					</array>
+					<array>
+						<integer>5139821254713278464</integer>
+						<integer>4311744513</integer>
+						<string>Channel 3</string>
+					</array>
+					<array>
+						<integer>5139821350513688908</integer>
+						<integer>4311744513</integer>
+						<string>Invalid</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GTP vChannel Usage</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5067190802232377344</integer>
+						<integer>4311744513</integer>
+						<string>Channel 0</string>
+					</array>
+					<array>
+						<integer>5067190806527344640</integer>
+						<integer>4311744513</integer>
+						<string>Channel 1</string>
+					</array>
+					<array>
+						<integer>5067190810822311936</integer>
+						<integer>4311744513</integer>
+						<string>Channel 2</string>
+					</array>
+					<array>
+						<integer>5067190815117279232</integer>
+						<integer>4311744513</integer>
+						<string>Channel 3</string>
+					</array>
+					<array>
+						<integer>5067190910917689676</integer>
+						<integer>4311744513</integer>
+						<string>Invalid</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>FRG vChannel Usage</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>7205759403792793600</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4847083967514411008</integer>
+						<integer>4311744513</integer>
+						<string>Channel 0</string>
+					</array>
+					<array>
+						<integer>4847083971809378304</integer>
+						<integer>4311744513</integer>
+						<string>Channel 1</string>
+					</array>
+					<array>
+						<integer>4847083976104345600</integer>
+						<integer>4311744513</integer>
+						<string>Channel 2</string>
+					</array>
+					<array>
+						<integer>4847083980399312896</integer>
+						<integer>4311744513</integer>
+						<string>Channel 3</string>
+					</array>
+					<array>
+						<integer>4847084076199723340</integer>
+						<integer>4311744513</integer>
+						<string>Invalid</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>CDM vChannel Usage</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5644502715066697043</integer>
+						<integer>4311744513</integer>
+						<string>Total Number of UMA Pages</string>
+					</array>
+					<array>
+						<integer>5644502715302104147</integer>
+						<integer>4311744513</integer>
+						<string>Total Number of UMA Pools</string>
+					</array>
+					<array>
+						<integer>5786931235326872832</integer>
+						<integer>4311744513</integer>
+						<string>Total memory of UMA HW Pools</string>
+					</array>
+					<array>
+						<integer>4774171070670918484</integer>
+						<integer>4311744513</integer>
+						<string>Total memory of Backup Lists</string>
+					</array>
+					<array>
+						<integer>5279420809940522565</integer>
+						<integer>4311744513</integer>
+						<string>Shaders with only Ideal exceeding HW Max</string>
+					</array>
+					<array>
+						<integer>5569068516877095519</integer>
+						<integer>4311744513</integer>
+						<string>Shaders with only Min exceeding HW Max</string>
+					</array>
+					<array>
+						<integer>4778130399208818002</integer>
+						<integer>4311744513</integer>
+						<string>Shaders with both Min and Ideal exceeding HW Max</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>UMA Pool Memory Usage</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5569068585445838336</integer>
+						<integer>4311744513</integer>
+						<string>Min of Minimum UMA Allocation Size</string>
+					</array>
+					<array>
+						<integer>5566827780748430848</integer>
+						<integer>4311744513</integer>
+						<string>Max of Minimum UMA Allocation Size</string>
+					</array>
+					<array>
+						<integer>4708028935106547200</integer>
+						<integer>4311744513</integer>
+						<string>Avg of Minimum UMA Allocation Size</string>
+					</array>
+					<array>
+						<integer>5569068585378399553</integer>
+						<integer>4311744513</integer>
+						<string>Min of Ideal UMA Allocation Size</string>
+					</array>
+					<array>
+						<integer>5566827780680992065</integer>
+						<integer>4311744513</integer>
+						<string>Max of Ideal UMA Allocation Size</string>
+					</array>
+					<array>
+						<integer>4708028935039108417</integer>
+						<integer>4311744513</integer>
+						<string>Avg of Ideal UMA Allocation Size</string>
+					</array>
+					<array>
+						<integer>6075167061776155985</integer>
+						<integer>4311744513</integer>
+						<string>Total submissions</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>UMA Allocation Size Stats</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					CgAAAAAAAAAAAAAACgAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5928236041702360388</integer>
+						<integer>42966450179</integer>
+						<string>UMA HW Reserved Pages Distribution</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>UMA Metric Reserved Pages Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					CgAAAAAAAAAAAAAACgAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5566818920096333824</integer>
+						<integer>42966450179</integer>
+						<string>UMA HW Mapped Pages Distribution</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>UMA Metric Mapped Pages Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5790016473443419973</integer>
+						<integer>4295098369</integer>
+						<string>GPU Discrete Power Zone Engaged</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Discrete Power Zone Engaged</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5790030788519936857</integer>
+						<integer>30064902146</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GPU Discrete Power Zone Residency</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>22614008965386828</integer>
+						<integer>85899476994</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GPU Power Controller States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>18373192617054796</integer>
+						<integer>85899476994</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>AFR Power Controller States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5786374964131332096</integer>
+						<integer>103079346178</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>PMU Loop Lost Performance Reason Code States</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>72058115876454424</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5138701042687429888</integer>
+						<integer>47244771330</integer>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>PPM Target as % of Max GPU Power</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644142538244423</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622704</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 0</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622705</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 1</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622706</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 2</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622707</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 3</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622708</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 4</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622709</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 5</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622710</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 6</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622711</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 7</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622712</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 8</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867622713</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 9</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867618608</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 10</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867618609</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 11</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867618610</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 12</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867618611</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 13</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867618612</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 14</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					MgAAAAAAAAAAAAAAEwAAAOgDAAAAAAAAAQAA
+					AAoAAAA=
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644189867618613</integer>
+						<integer>124554182659</integer>
+						<string>GPU UT Engagement centi-%</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT Engagement</string>
+				<key>IOReportSubGroupName</key>
+				<string>UT Engagement centi-% Histogram for perf state 15</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319216</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 0</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319217</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 1</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319218</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 2</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319219</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 3</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319220</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 4</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319221</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 5</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319222</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 6</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319223</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 7</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319224</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 8</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319225</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 9</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319472</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 10</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319473</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 11</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319474</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 12</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319475</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 13</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319476</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 14</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>4708035475805319477</integer>
+						<integer>137439084547</integer>
+						<string>GPU AVMR Offset</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>AVMR Offset</string>
+				<key>IOReportSubGroupName</key>
+				<string>AVMR Offset Histogram for perf state 15</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538800</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_0</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538801</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_1</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538802</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_2</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538803</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_3</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538804</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_4</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538805</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_5</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538806</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_6</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538807</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_7</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538808</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_8</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814538809</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_9</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814551344</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_10</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814551345</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_11</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814551346</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_12</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814551347</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_13</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814551348</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_14</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176814551349</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Min_UT_Engagement_Perf_State_15</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Min</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976432</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_0</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976433</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_1</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976434</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_2</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976435</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_3</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976436</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_4</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976437</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_5</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976438</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_6</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976439</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_7</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976440</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_8</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680976441</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_9</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680988976</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_10</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680988977</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_11</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680988978</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_12</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680988979</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_13</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680988980</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_14</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644176680988981</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Max_UT_Engagement_Perf_State_15</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Max</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603632</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_0</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603633</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_1</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603634</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_2</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603635</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_3</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603636</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_4</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603637</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_5</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603638</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_6</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603639</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_7</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603640</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_8</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785603641</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_9</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785616176</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_10</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785616177</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_11</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785616178</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_12</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785616179</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_13</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202785616180</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_14</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644202802393397</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Sum_UT_Engagement_Perf_State_15</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Sum</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145136</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_0</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145137</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_1</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145138</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_2</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145139</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_3</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145140</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_4</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145141</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_5</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145142</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_6</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145143</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_7</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145144</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_8</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949145145</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_9</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949157680</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_10</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949157681</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_11</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949157682</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_12</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949157683</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_13</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949157684</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_14</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644133949157685</integer>
+						<integer>4311744513</integer>
+						<string>AGX.Count_UT_Engagement_Perf_State_15</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562608</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_0</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562609</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_1</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562610</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_2</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562611</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_3</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562612</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_4</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562613</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_5</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562614</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_6</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562615</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_7</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562616</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_8</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210562617</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_9</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210575152</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_10</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210575153</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_11</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210575154</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_12</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210575155</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_13</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210575156</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_14</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6148644181210575157</integer>
+						<integer>4311744513</integer>
+						<string>AGX.UT_Not_Engaged_Perf_State_15</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU UT AggD Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Not_Engaged_Count</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					ZAAAAAAAAAAAAAAACQAAAOgDAAAAAAAAAQAA
+					AAQAAACIEwAAAAAAAAIAAAAKAAAA
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>648672277969240064</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6003378895330628934</integer>
+						<integer>98784509955</integer>
+						<string>Spill Buffer Usage</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Spill Buffer Usage Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					ZAAAAAAAAAAAAAAACQAAAOgDAAAAAAAAAQAA
+					AAQAAACIEwAAAAAAAAIAAAAEAAAA
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>648672277969240064</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6003383263446516801</integer>
+						<integer>73014706179</integer>
+						<string>Spill Buffer Metadata Usage</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Spill Buffer Metadata Usage Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelConfig</key>
+					<data>
+					AQAAAAAAAAAAAAAAIAAAAA==
+					</data>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>6003392098212201796</integer>
+						<integer>137439215619</integer>
+						<string>Spill Buffer Unused Blocks per Task</string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>Spill Buffer Metadata Unused Blocks Per Task Histogram</string>
+			</dict>
+			<dict>
+				<key>IOReportChannelInfo</key>
+				<dict>
+					<key>IOReportChannelUnit</key>
+					<integer>0</integer>
+				</dict>
+				<key>IOReportChannels</key>
+				<array>
+					<array>
+						<integer>5212723368167473152</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter HWPI </string>
+					</array>
+					<array>
+						<integer>4922510259018268672</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter DPE  </string>
+					</array>
+					<array>
+						<integer>5569073961448243200</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter Misc </string>
+					</array>
+					<array>
+						<integer>5284486310269026304</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter IVDM </string>
+					</array>
+					<array>
+						<integer>6075167061770764288</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter Total</string>
+					</array>
+					<array>
+						<integer>4841739380336885760</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter C1PPT   </string>
+					</array>
+					<array>
+						<integer>4996836426115534403</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter ExtAsync</string>
+					</array>
+					<array>
+						<integer>6148539391267569664</integer>
+						<integer>4311875585</integer>
+						<string>Throttle Counter UT      </string>
+					</array>
+					<array>
+						<integer>5284486311867926862</integer>
+						<integer>4311875585</integer>
+						<string>IVDM: Min Active Throttle Percent</string>
+					</array>
+					<array>
+						<integer>5284486311867924824</integer>
+						<integer>4311875585</integer>
+						<string>IVDM: Max Throttle Percent       </string>
+					</array>
+				</array>
+				<key>IOReportGroupName</key>
+				<string>GPU Stats</string>
+				<key>IOReportSubGroupName</key>
+				<string>GPU Throttler Counters</string>
+			</dict>
+		</array>
+		<key>IOReportLegendPublic</key>
+		<true/>
+		<key>IOServiceBusyState</key>
+		<integer>0</integer>
+		<key>IOServiceBusyTime</key>
+		<integer>350301208</integer>
+		<key>IOServiceState</key>
+		<integer>30</integer>
+		<key>IOSourceVersion</key>
+		<string>362.5.1</string>
+		<key>KDebugVersion</key>
+		<integer>4294967296</integer>
+		<key>MetalPluginClassName</key>
+		<string>AGXG16GDevice</string>
+		<key>MetalPluginName</key>
+		<string>AGXMetalG16G_B0</string>
+		<key>PerformanceStatistics</key>
+		<dict>
+			<key>Alloc system memory</key>
+			<integer>3066118144</integer>
+			<key>Allocated PB Size</key>
+			<integer>88735744</integer>
+			<key>Device Utilization %</key>
+			<integer>24</integer>
+			<key>In use system memory</key>
+			<integer>704217088</integer>
+			<key>In use system memory (driver)</key>
+			<integer>0</integer>
+			<key>Renderer Utilization %</key>
+			<integer>23</integer>
+			<key>SplitSceneCount</key>
+			<integer>0</integer>
+			<key>TiledSceneBytes</key>
+			<integer>1212416</integer>
+			<key>Tiler Utilization %</key>
+			<integer>24</integer>
+			<key>lastRecoveryTime</key>
+			<integer>0</integer>
+			<key>recoveryCount</key>
+			<integer>0</integer>
+		</dict>
+		<key>SCMBuildTime</key>
+		<string></string>
+		<key>SCMVersionNumber</key>
+		<string></string>
+		<key>SchedulerState</key>
+		<dict>
+			<key>BusyWorkQueues</key>
+			<array/>
+			<key>Stamps</key>
+			<array/>
+		</dict>
+		<key>SurfaceList</key>
+		<array/>
+		<key>gpu-core-count</key>
+		<integer>8</integer>
+		<key>model</key>
+		<string>Apple M4</string>
+		<key>vendor-id</key>
+		<data>
+		axAAAA==
+		</data>
+	</dict>
+</array>
+</plist>
