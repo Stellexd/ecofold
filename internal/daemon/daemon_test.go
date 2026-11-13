@@ -64,6 +64,23 @@ func TestStartupRestoreFailureRestoresOnFirstPause(t *testing.T) {
 	}
 }
 
+// TestStartupRestoreFailureStillCapsWhileFolding pins CH3-1: an unknown limit
+// after a failed startup restore must not be mistaken for an applied cap.
+func TestStartupRestoreFailureStillCapsWhileFolding(t *testing.T) {
+	h := newHarness(t, true)
+	if err := (marker{dir: h.dir}).set(); err != nil {
+		t.Fatalf("marker.set: %v", err)
+	}
+	h.gpu.set(func(g *fakeGPU) { g.restoreErr = errors.New("nvml ocupado") })
+	h.start(t)
+
+	h.ticks(DefaultConfig().StartupHoldTicks+1, snapIdle)
+	set, resume := h.log.index("gpu.Set(123)"), h.log.index("fah.Resume")
+	if set < 0 || resume < 0 || set > resume {
+		t.Fatalf("se esperaba Set(123) antes de Resume con el límite desconocido: %v", h.log.all())
+	}
+}
+
 // TestEcoCapAppliedOnceWhileFolding verifies the 123 W cap is applied on the
 // first folding tick and not reapplied every tick.
 func TestEcoCapAppliedOnceWhileFolding(t *testing.T) {
