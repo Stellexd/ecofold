@@ -29,8 +29,10 @@ In this order. Each step is its own branch and PR to `develop`.
      `Restart=`.
    - The in-process cooldown after closing a real game (2 min) ends with
      123 W and FAH folding.
-2. **Daemon chaos pass** (new, see the rationale below), branch
-   `test/m3-daemon-chaos`, report in `docs/CHAOS_REPORT_M3.md`.
+2. [x] **Daemon chaos pass**, branch `test/m3-daemon-chaos`, report in
+   `docs/CHAOS_REPORT_M3.md` (2026-11-13). Found and fixed CH3-1 (unknown
+   limit after a failed startup restore skipped the eco cap); residual risks
+   R3-1 and R3-2 accepted. The systemd part moves to step 1.
 3. **M2 layer 2** (issue #2): Proton/Wine watcher and the Discord/Electron
    filter (section 2 below).
 4. **Go 1.27.4** on both machines and in `go.mod` (GO-2026-6859), before any
