@@ -18,7 +18,7 @@ When writing or modifying hardware, GPU, or process detection code, enforce thes
    - Never execute `nvidia-smi` or shell subcommands in a polling loop.
    - Layer 1: Poll `nvmlDeviceGetGraphicsRunningProcesses` every 1.5–2s. Trigger `StatePausedLoad` if non-ignored processes exceed the VRAM threshold (`GPUMemThresholdMiB` = 1500 MiB, rule `>=`) and utilization meets or exceeds `GPUMemRequiresUtilPct` (25%).
    - Layer 2: Detect active Wine/Proton (`wineserver`, `reaper`, `.exe` payloads like `deadlock.exe`) and apply a configurable exit cooldown (2–3 minutes) before restoring folding state.
-   - *Status:* The Linux NVML-based detection layers are pending implementation; the architecture supports them, but the current repository focuses on the macOS mock path.
+   - *Status:* Layer 1 is implemented in `internal/detector/linux_collector.go` using per-process SM utilization from NVML (`GetProcessUtilization`), plus the cooldown latch in `Evaluator` (`CooldownTicksRequired`, clamped to 60–90 ticks). Layer 2 (Proton/Wine watcher) is still pending.
 
 4. **macOS Apple Silicon Telemetry & Detection (`//go:build darwin`):**
    - It is permitted to call `ioreg -a -r -d 1 -c AppleSmartBattery` and `ioreg -a -r -d 1 -c IOAccelerator` **only during initialization or one-shot refresh**, not in a tight polling loop.

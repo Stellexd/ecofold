@@ -10,14 +10,17 @@ bindings; macOS builds use an in-memory mock for development on Apple Silicon.
 Celsius, current power use and power limit in watts, minimum/maximum/default
 power limits in watts, used and total VRAM in MiB, and a
 `SupportsPowerLimit` capability flag. `ProcessInfo` contains a process ID
-(`PID`, `uint32`) and its GPU-memory use (`UsedVRAMMiB`, `uint64`).
+(`PID`, `uint32`), its GPU-memory use (`UsedVRAMMiB`, `uint64`), and its
+per-process SM utilization (`SMUtilPct`, 0–100). `SMUtilValid` reports whether
+the provider could attribute utilization at all: `false` means "unknown", never
+"0 %", and callers must not treat it as inactivity.
 
 The `Provider` interface has six methods:
 
 | Method | Purpose |
 | --- | --- |
-| `Init() error` | Initialize the platform provider and its resources. |
-| `Shutdown() error` | Release provider resources. |
+| `Init() error` | Initialize the platform provider and its resources. Idempotent: calling it on an initialized provider is a no-op. |
+| `Shutdown() error` | Release provider resources. Idempotent and a no-op before `Init`. |
 | `GetTelemetry() (Telemetry, error)` | Read a telemetry snapshot. |
 | `SetPowerLimit(watts int) error` | Set a power limit specified in watts. |
 | `RestoreDefaultPowerLimit() error` | Restore the device's default power limit. |
@@ -37,12 +40,20 @@ against the device's actual NVML constraints.
 
 ## Linux: NVML-backed NVIDIA provider
 
-`nvidia_linux.go` has the `//go:build linux` constraint and is the only provider
-implementation that imports `github.com/NVIDIA/go-nvml/pkg/nvml`. `NvidiaProvider`
-opens NVIDIA GPU index `0`. `Init` initializes NVML and gets that device handle;
-if handle lookup fails after NVML initialization, it shuts NVML down before
-returning the error. Telemetry, setting/restoring a limit, and process queries
-return an error if the device handle has not been initialized.
+`nvidia_linux.go` has the `//go:build linux && cgo` constraint and is the only
+provider implementation that imports `github.com/NVIDIA/go-nvml/pkg/nvml`. Linux
+builds without CGO (for example, cross-compiling from macOS) use `stub_linux.go`
+instead, which mirrors the mock and never drives real hardware. `NvidiaProvider`
+opens NVIDIA GPU index `0`. Telemetry, setting/restoring a limit, and process
+queries return an error if the device handle has not been initialized.
+
+NVML is process-global, so `nvml.Init` and `nvml.Shutdown` go through a
+package-level reference count (`acquireNVML`/`releaseNVML`). The first
+reference initializes NVML and only the last release shuts it down, so several
+providers can coexist and a stray `Shutdown` never tears NVML down under another
+provider. `Init` and `Shutdown` are idempotent per provider; if handle lookup
+fails after NVML initialization, `Init` releases its reference before returning
+the error.
 
 `GetTelemetry` reads the GPU name, UUID, temperature, power use, current limit,
 supported limit constraints, default limit, and memory information. It reports
@@ -55,7 +66,12 @@ the inclusive device range before calling NVML to apply the limit. The default
 limit is already supplied by NVML in milliwatts, so
 `RestoreDefaultPowerLimit` applies that value directly. `GetGraphicsProcesses`
 uses NVML's graphics-running-process list and converts each process's GPU-memory
-usage from bytes to MiB.
+usage from bytes to MiB. It enriches each process with per-process SM
+utilization from `GetProcessUtilization`, passing a high-water timestamp so
+each call returns only fresh samples. Device-wide utilization is deliberately
+not used, because the Folding@home core keeps the GPU busy. `ERROR_NOT_FOUND`
+(no fresh samples) is reported as valid 0 %; `ERROR_NOT_SUPPORTED` sets
+`SMUtilValid=false`.
 
 ## macOS: Apple Silicon development mock
 
@@ -69,7 +85,9 @@ initial telemetry values are 42 °C, 75 W power use, and 512 MiB used out of
 
 Because Apple Silicon does not support this provider's power-limit controls,
 `SetPowerLimit` and `RestoreDefaultPowerLimit` return an unsupported-operation
-error rather than changing state. `Shutdown` is a no-op. `NewProvider` returns
+error rather than changing state. `Shutdown` marks the mock uninitialized: like
+NVML, every other method fails until `Init` is called again. The mock reports
+no per-process utilization (`SMUtilValid=false`). `NewProvider` returns
 the platform-specific implementation (`NvidiaProvider` on Linux and
 `MockProvider` on macOS).
 

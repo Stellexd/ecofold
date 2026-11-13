@@ -10,41 +10,104 @@ import (
 )
 
 // NvidiaProvider uses the NVIDIA NVML library to manage a single GPU (index 0).
+//
+// NVML is process-global: nvml.Init and nvml.Shutdown affect the whole
+// process, not one handle. The package therefore keeps a reference count so
+// several providers can coexist, the last Shutdown performs the real
+// nvml.Shutdown, and a stray Shutdown never tears NVML down under another
+// provider.
 type NvidiaProvider struct {
-	mu     sync.Mutex
-	device nvml.Device
+	mu          sync.Mutex
+	device      nvml.Device
+	initialized bool
+	// lastSeenUtil is the high-water timestamp passed to
+	// GetProcessUtilization so each call returns only fresh samples.
+	lastSeenUtil uint64
 }
 
-// Init initializes NVML and opens GPU handle 0.
+var (
+	nvmlMu   sync.Mutex
+	nvmlRefs int
+)
+
+// acquireNVML increments the process-wide NVML reference count, initializing
+// the library on the first reference. The caller must pair it with
+// releaseNVML.
+func acquireNVML() error {
+	nvmlMu.Lock()
+	defer nvmlMu.Unlock()
+
+	if nvmlRefs > 0 {
+		nvmlRefs++
+		return nil
+	}
+	if ret := nvml.Init(); ret != nvml.SUCCESS {
+		return fmtError("nvml.Init", ret)
+	}
+	nvmlRefs = 1
+	return nil
+}
+
+// releaseNVML drops one reference and shuts NVML down when the last one goes
+// away. The count only reaches zero after a successful shutdown, so a failed
+// nvml.Shutdown can be retried by calling releaseNVML again.
+func releaseNVML() error {
+	nvmlMu.Lock()
+	defer nvmlMu.Unlock()
+
+	switch {
+	case nvmlRefs == 0:
+		return nil
+	case nvmlRefs > 1:
+		nvmlRefs--
+		return nil
+	}
+	if ret := nvml.Shutdown(); ret != nvml.SUCCESS {
+		return fmtError("nvml.Shutdown", ret)
+	}
+	nvmlRefs = 0
+	return nil
+}
+
+// Init initializes NVML and opens GPU handle 0. It is idempotent: calling it
+// on an already initialized provider is a no-op, so it never leaks an NVML
+// reference.
 func (p *NvidiaProvider) Init() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	ret := nvml.Init()
-	if ret != nvml.SUCCESS {
-		return fmtError("nvml.Init", ret)
+	if p.initialized {
+		return nil
+	}
+	if err := acquireNVML(); err != nil {
+		return err
 	}
 
 	dev, ret := nvml.DeviceGetHandleByIndex(0)
 	if ret != nvml.SUCCESS {
-		_ = nvml.Shutdown()
+		_ = releaseNVML()
 		return fmtError("nvml.DeviceGetHandleByIndex(0)", ret)
 	}
 	p.device = dev
+	p.initialized = true
+	p.lastSeenUtil = 0
 	return nil
 }
 
-// Shutdown releases NVML resources.
+// Shutdown releases the provider's NVML resources. It is idempotent and a
+// no-op before Init, so it never shuts NVML down on behalf of another
+// provider.
 func (p *NvidiaProvider) Shutdown() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	ret := nvml.Shutdown()
-	p.device = nil
-	if ret != nvml.SUCCESS {
-		return fmtError("nvml.Shutdown", ret)
+	if !p.initialized {
+		return nil
 	}
-	return nil
+	p.device = nil
+	p.initialized = false
+	p.lastSeenUtil = 0
+	return releaseNVML()
 }
 
 // GetTelemetry reads the current GPU telemetry snapshot.
@@ -161,7 +224,10 @@ func (p *NvidiaProvider) RestoreDefaultPowerLimit() error {
 	return nil
 }
 
-// GetGraphicsProcesses returns the list of graphics processes running on the GPU.
+// GetGraphicsProcesses returns the list of graphics processes running on the
+// GPU, enriched with per-process SM utilization when NVML can attribute it.
+// The device-wide utilization is deliberately not used: the Folding@home core
+// keeps the GPU busy, so only per-process samples can tell a game apart.
 func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -174,14 +240,111 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 		return nil, fmtError("GetGraphicsRunningProcesses", ret)
 	}
 
+	utilByPID, utilValid, err := p.processUtilization()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]ProcessInfo, 0, len(procs))
 	for _, proc := range procs {
-		result = append(result, ProcessInfo{
+		info := ProcessInfo{
 			PID:         proc.Pid,
 			UsedVRAMMiB: bytesToMiB(proc.UsedGpuMemory),
-		})
+			SMUtilValid: utilValid,
+		}
+		if utilValid {
+			// A graphics process without a fresh sample was idle during the last
+			// sampling window, so 0 is a valid measurement.
+			info.SMUtilPct = utilByPID[proc.Pid]
+		}
+		result = append(result, info)
 	}
 	return result, nil
+}
+
+// classifyUtilReturn maps an NVML GetProcessUtilization return code to the
+// action processUtilization should take.
+//   - utilizable: the returned samples (which may be empty) can be exposed to
+//     callers as fresh measurements.
+//   - advance: the high-water timestamp may be moved forward based on the
+//     sample timestamps. It is only true for codes that return data; for
+//     ERROR_NOT_FOUND the timestamp is left unchanged so the next call still
+//     asks for fresh data, and for ERROR_NOT_SUPPORTED/errors no advancement
+//     happens at all.
+func classifyUtilReturn(ret nvml.Return) (utilizable, advance bool, err error) {
+	switch ret {
+	case nvml.SUCCESS:
+		return true, true, nil
+	case nvml.ERROR_NOT_FOUND:
+		// No fresh samples since lastSeenUtil: every process was idle in the
+		// last window. This is a successful empty result.
+		return true, false, nil
+	case nvml.ERROR_INSUFFICIENT_SIZE:
+		// NVML returned a partial sample list. Use what we got and advance the
+		// watermark only up to the newest real sample timestamp so we never
+		// fabricate an idle window.
+		return true, true, nil
+	case nvml.ERROR_NOT_SUPPORTED:
+		return false, false, nil
+	default:
+		return false, false, fmtError("GetProcessUtilization", ret)
+	}
+}
+
+// processUtilization fetches per-process SM utilization since the last call.
+// It reports utilValid=false when NVML does not support the query, so callers
+// never confuse "unsupported" with "idle".
+func (p *NvidiaProvider) processUtilization() (map[uint32]int, bool, error) {
+	samples, ret := p.device.GetProcessUtilization(p.lastSeenUtil)
+	utilizable, advance, err := classifyUtilReturn(ret)
+	if err != nil {
+		return nil, false, err
+	}
+	if !utilizable {
+		return nil, false, nil
+	}
+	byPID, high := mergeUtilizationSamples(p.lastSeenUtil, samples)
+	if advance && high > p.lastSeenUtil {
+		p.lastSeenUtil = high
+	}
+	return byPID, true, nil
+}
+
+// mergeUtilizationSamples keeps the most recent sample per PID and returns the
+// new high-water timestamp to pass to the next NVML call.
+func mergeUtilizationSamples(lastSeen uint64, samples []nvml.ProcessUtilizationSample) (map[uint32]int, uint64) {
+	type latest struct {
+		ts   uint64
+		util int
+	}
+	seen := make(map[uint32]latest, len(samples))
+	high := lastSeen
+	for _, s := range samples {
+		if s.TimeStamp > high {
+			high = s.TimeStamp
+		}
+		cur, ok := seen[s.Pid]
+		if ok && s.TimeStamp < cur.ts {
+			continue
+		}
+		seen[s.Pid] = latest{ts: s.TimeStamp, util: clampPercent(int(s.SmUtil))}
+	}
+	byPID := make(map[uint32]int, len(seen))
+	for pid, l := range seen {
+		byPID[pid] = l.util
+	}
+	return byPID, high
+}
+
+// clampPercent limits a percentage to [0,100].
+func clampPercent(pct int) int {
+	switch {
+	case pct < 0:
+		return 0
+	case pct > 100:
+		return 100
+	}
+	return pct
 }
 
 // NewProvider returns the Linux NVML-backed Provider.
