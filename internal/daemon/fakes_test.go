@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Stellexd/ecofold/internal/detector"
 	"github.com/Stellexd/ecofold/internal/fah"
@@ -71,6 +72,7 @@ type fakeGPU struct {
 	setErr       error
 	restoreErr   error
 	restoreBlock chan struct{} // when non-nil, Restore blocks until it is closed
+	delay        time.Duration // added to Set and Restore
 }
 
 var _ gpu.Provider = (*fakeGPU)(nil)
@@ -105,15 +107,18 @@ func (g *fakeGPU) GetTelemetry() (gpu.Telemetry, error) {
 func (g *fakeGPU) SetPowerLimit(watts int) error {
 	g.log.add(fmt.Sprintf("gpu.Set(%d)", watts))
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.setErr
+	delay, err := g.delay, g.setErr
+	g.mu.Unlock()
+	time.Sleep(delay)
+	return err
 }
 
 func (g *fakeGPU) RestoreDefaultPowerLimit() error {
 	g.log.add("gpu.Restore")
 	g.mu.Lock()
-	block, err := g.restoreBlock, g.restoreErr
+	block, err, delay := g.restoreBlock, g.restoreErr, g.delay
 	g.mu.Unlock()
+	time.Sleep(delay)
 	if block != nil {
 		<-block
 	}
@@ -134,12 +139,14 @@ func (g *fakeGPU) set(fn func(g *fakeGPU)) {
 type fakeFAH struct {
 	log *callLog
 
-	mu        sync.Mutex
-	status    fah.Status
-	statusErr error
-	pauseErr  error
-	resumeErr error
-	closed    bool
+	mu         sync.Mutex
+	status     fah.Status
+	statusErr  error
+	pauseErr   error
+	resumeErr  error
+	closed     bool
+	delay      time.Duration // added to Pause, Resume and GetStatus
+	afterClose int           // calls received after Close
 }
 
 var _ fah.Controller = (*fakeFAH)(nil)
@@ -150,6 +157,7 @@ func newFakeFAH(log *callLog) *fakeFAH {
 
 func (f *fakeFAH) Pause(ctx context.Context) error {
 	f.log.add("fah.Pause")
+	f.wait(ctx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.pauseErr != nil {
@@ -161,6 +169,7 @@ func (f *fakeFAH) Pause(ctx context.Context) error {
 
 func (f *fakeFAH) Resume(ctx context.Context) error {
 	f.log.add("fah.Resume")
+	f.wait(ctx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.resumeErr != nil {
@@ -172,12 +181,33 @@ func (f *fakeFAH) Resume(ctx context.Context) error {
 
 func (f *fakeFAH) GetStatus(ctx context.Context) (fah.Status, error) {
 	f.log.add("fah.Status")
+	f.wait(ctx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.statusErr != nil {
 		return fah.Status{State: fah.StateUnknown}, f.statusErr
 	}
 	return f.status, nil
+}
+
+// wait applies the configured delay, honoring ctx like the real client, and
+// counts calls that arrive after Close.
+func (f *fakeFAH) wait(ctx context.Context) {
+	f.mu.Lock()
+	delay := f.delay
+	if f.closed {
+		f.afterClose++
+	}
+	f.mu.Unlock()
+	if delay <= 0 {
+		return
+	}
+	t := time.NewTimer(delay)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }
 
 func (f *fakeFAH) Close() error {
