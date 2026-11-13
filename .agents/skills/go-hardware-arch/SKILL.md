@@ -21,7 +21,7 @@ When writing or modifying hardware, GPU, or process detection code, enforce thes
    - *Status:* Layer 1 is implemented in `internal/detector/linux_collector.go` using per-process SM utilization from NVML (`GetProcessUtilization`), plus the cooldown latch in `Evaluator` (`CooldownTicksRequired`, clamped to 60–90 ticks). Layer 2 (Proton/Wine watcher) is still pending.
 
 4. **macOS Apple Silicon Telemetry & Detection (`//go:build darwin`):**
-   - It is permitted to call `ioreg -a -r -d 1 -c AppleSmartBattery` and `ioreg -a -r -d 1 -c IOAccelerator` **only during initialization or one-shot refresh**, not in a tight polling loop.
+   - It is permitted to call `/usr/sbin/ioreg -a -r -d 1 -c IOAccelerator` and `-c AppleSmartBattery` only through the bounded fetcher (`FetchIORegContext`: context deadline, 2 MiB output cap). `DarwinCollector` reads `IOAccelerator` once per daemon tick (never more often than every 2 s) and caches `AppleSmartBattery` for 15 ticks (30 s). Never call `ioreg` in a tighter loop.
    - The resulting XML property list must be parsed **in memory** using `howett.net/plist` (pure Go, no cgo). Never link against IOKit frameworks.
    - Decode `AppleSmartBattery` for electrical state and `IOAccelerator` for GPU utilization.
    - Electrical-state mapping must follow `MACOS_TELEMETRY.md` and `internal/detector/README.md`:

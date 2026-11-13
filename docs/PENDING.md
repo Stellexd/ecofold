@@ -16,20 +16,37 @@ down in this file; tick both places.
 
 ### 1. Daemon main loop (`cmd/ecofold-daemon`), branch `feat/m3-daemon-loop`
 
-- [ ] 2 s tick loop: `LinuxCollector.Collect` → `Evaluator.Evaluate` → apply
-  the power limit and `fah.Controller` Pause/Resume.
-- [ ] Keep the previous decision when `Collect` returns an error (never feed
+Design and decisions: `docs/DAEMON_PLAN.md`. Implemented in
+`internal/daemon` and `cmd/ecofold-daemon`; the macOS items were verified with
+`go test -race ./...` on 2026-11-13. Linux items still need a CachyOS run.
+
+- [x] 2 s tick loop: `Collect` → `Evaluator.Evaluate` → apply the power limit
+  and `fah.Controller` Pause/Resume (`LinuxCollector` on Linux,
+  `DarwinCollector` on macOS).
+- [x] Keep the previous decision when `Collect` returns an error (never feed
   "no load" to the evaluator).
-- [ ] Fail-safe: `signal.NotifyContext(ctx, SIGINT, SIGTERM)` and
-  `RestoreDefaultPowerLimit()` on every exit path, including panics.
-- [ ] **CH2-H1:** send `Pause` on game load even when FAH reports itself idle.
-- [ ] **CH-10:** only `Resume` a pause the daemon made itself, never a manual one.
-- [ ] **M2-BLOCK:** detect missing per-process utilization at startup and
-  report it clearly instead of failing silently.
+- [x] Fail-safe: `signal.NotifyContext(ctx, SIGINT, SIGTERM)` and
+  `RestoreDefaultPowerLimit()` on every exit path, including panics in the
+  control loop. Restore is bounded (M4) and backed by `ExecStopPost`.
+- [x] **CH2-H1:** send `Pause` on game load even when FAH reports itself idle.
+- [x] **CH-10:** only `Resume` a pause the daemon made itself, never a manual
+  one. Ownership survives restarts through `/run/ecofold/paused-by-daemon`.
+- [x] **M2-BLOCK:** `detector.ErrPerProcessUtilUnsupported` latches the daemon
+  into `Degraded` (default power limit, FAH left as is) with one clear warning.
 - [ ] systemd unit with only `CAP_SYS_ADMIN` (no full root), restart policy and
-  `ExecStopPost` that restores the default power limit.
-- [ ] End-to-end check on CachyOS: open *Deadlock* → TDP 145 W and FAH paused
-  within 2 s; close it → cooldown → 123 W and folding again.
+  `ExecStopPost` that restores the default power limit. Draft in
+  `deploy/systemd/ecofold-daemon.service`; verify on CachyOS.
+- [x] Pause half of the end-to-end check with *Baldur's Gate 3* on CachyOS
+  (2026-11-13): `bg3` at 55-59 % SM was detected after the 3-tick sustain;
+  default limit restored 9 ms after the decision and FAH pause confirmed
+  1.24 s after it.
+- [x] Linux compile and `go test -race ./...` with `CGO_ENABLED=1` on CachyOS
+  (2026-11-13). An unprivileged run against the real RTX 5060 and FAH
+  container started, collected real per-process data (no M2-BLOCK), detected
+  `NVML_ERROR_NO_PERMISSION` and fell back to pause-only without touching FAH.
+- [ ] End-to-end check on CachyOS: open *Deadlock* → once the evaluator decides
+  to pause (about 6 s of sustained load), TDP back to 145 W and FAH paused
+  within 2 s of that decision; close it → cooldown → 123 W and folding again.
 
 ### 2. Close M2 (issue #2): Proton/Wine watcher, branch `feat/m2-proton-watcher`
 
@@ -39,6 +56,10 @@ down in this file; tick both places.
 - [ ] Calibrate the thresholds (45 % / 25 % / 1500 MiB) with real games through
   the daemon and update `internal/detector/README.md`.
 - [ ] **R3** and **R4** decided or fixed.
+- [ ] Filter Electron helpers: add `discord` (and other Electron binaries) to
+  `browserBinaries` in `linux_collector.go`, so `isBrowserHelper` drops their
+  `--type=renderer` and `--type=gpu-process` processes. Found on CachyOS:
+  Discord's renderer is listed by NVML as a graphics process.
 
 ### 3. M3 (issue #3): IPC and GUI
 
@@ -61,6 +82,14 @@ down in this file; tick both places.
 - [ ] Tag `v0.1.0` on `main` once every box above is ticked.
 
 ### Housekeeping (any time)
+
+- [x] Disable the legacy `autofold.service` (user unit running
+  `~/folding/auto_fold.py`) on CachyOS (2026-11-13). It changed the power
+  limit with `sudo nvidia-smi -pl` and froze the FAH container with
+  `docker pause`; a frozen container cannot answer the FAH API, so EcoFold
+  cannot pause or resume it. The two must never run together.
+- [ ] AUR `PKGBUILD`: declare the legacy autofold setup in `conflicts` and
+  document in the README that `autofold.service` must be disabled.
 
 - [ ] Publish the FAH container on `127.0.0.1:7396:7396` instead of
   `0.0.0.0:7396` (see "FAH API exposed on the LAN" below).
@@ -271,10 +300,10 @@ See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verificatio
   context that `Close` cancels. Covered by `TestCloseAbortsInFlightDial`.
 - [x] **CH-7 Linux compile check.** `make test` passed on CachyOS with the
   `mwToWCeil` change in `nvidia_linux.go` (2026-11-11).
-- [ ] **CH2 H1: never skip a pause because FAH looks idle.** A running unit
+- [x] **CH2 H1: never skip a pause because FAH looks idle.** A running unit
   with an unreadable project is reported as `idle`. When a game is detected,
   the daemon must send `Pause` regardless of `Status.State`.
-- [ ] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
+- [x] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
   it paused folding itself, and must not resume a pause the user made by hand.
 - [x] **CH-11 NVML lifecycle.** Calling `Init` twice leaked an NVML reference,
   and `Shutdown` before `Init` still called `nvml.Shutdown`. Fixed together
