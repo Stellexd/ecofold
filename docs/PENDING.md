@@ -14,6 +14,48 @@ M2 layer 1 merged) to the `v0.1.0` public release. Tick each box in the PR that
 completes it. Items that reference an ID (CH-10, R3, …) are detailed further
 down in this file; tick both places.
 
+### Next steps (agreed 2026-11-13, after PR #14)
+
+In this order. Each step is its own branch and PR to `develop`.
+
+1. **Verify the systemd unit on CachyOS** (`deploy/systemd/ecofold-daemon.service`):
+   - `SetPowerManagementLimit` works as `User=ecofold` with only
+     `CAP_SYS_ADMIN`; otherwise fall back to `User=root` and keep the
+     bounding set and sandbox.
+   - `ExecStopPost` restores 145 W after `systemctl kill -s KILL`.
+   - `/proc/<pid>/comm` and `cmdline` of user games are readable under
+     `ProtectSystem=strict`; `DeviceAllow` paths match `ls /dev/nvidia*`.
+   - `RuntimeDirectoryPreserve=restart` keeps the pause marker across
+     `Restart=`.
+   - The in-process cooldown after closing a real game (2 min) ends with
+     123 W and FAH folding.
+2. **Daemon chaos pass** (new, see the rationale below), branch
+   `test/m3-daemon-chaos`, report in `docs/CHAOS_REPORT_M3.md`.
+3. **M2 layer 2** (issue #2): Proton/Wine watcher and the Discord/Electron
+   filter (section 2 below).
+4. **Go 1.27.4** on both machines and in `go.mod` (GO-2026-6859), before any
+   IPC socket exists (section 3 below).
+
+Why a chaos pass on the daemon even though M1 is heavily tested: the M1
+tests cover the packages in isolation, and the two M1 chaos passes still
+found real bugs (CH-1 to CH-11). `internal/daemon` is new, runs as root,
+owns the power limit and composes all three packages, and its riskiest
+paths are timing and ordering (shutdown during an in-flight NVML or FAH
+call, a FAH that flaps or is frozen by `docker pause`, a corrupt or
+unwritable marker, decisions that oscillate around the thresholds). Scope it
+to the daemon only, do not repeat M1:
+- Property tests over random tick sequences (load, battery, Collect errors,
+  FAH errors, restarts) checking the invariants: a user pause is never
+  resumed; `Resume` never runs while the eco cap is missing on a capable
+  GPU; every exit path attempts the restore; no FAH flapping within the
+  cooldown.
+- `go test -race -count=200` on the `Run`/shutdown tests, and
+  cancellation injected at every step of a tick.
+- Marker attacks: symlink, directory, read-only or full runtime dir.
+- FAH frozen with `docker pause` and killed mid-`Pause` on CachyOS.
+Do it after step 1 so the unit's behavior is included, and before the IPC
+socket adds a new attack surface (that one gets its own security review).
+
 ### 1. Daemon main loop (`cmd/ecofold-daemon`), branch `feat/m3-daemon-loop`
 
 Design and decisions: `docs/DAEMON_PLAN.md`. Implemented in
