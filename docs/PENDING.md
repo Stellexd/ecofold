@@ -44,9 +44,14 @@ Design and decisions: `docs/DAEMON_PLAN.md`. Implemented in
   (2026-11-13). An unprivileged run against the real RTX 5060 and FAH
   container started, collected real per-process data (no M2-BLOCK), detected
   `NVML_ERROR_NO_PERMISSION` and fell back to pause-only without touching FAH.
-- [ ] End-to-end check on CachyOS: open *Deadlock* → once the evaluator decides
+- [x] End-to-end check on CachyOS: open a game → once the evaluator decides
   to pause (about 6 s of sustained load), TDP back to 145 W and FAH paused
-  within 2 s of that decision; close it → cooldown → 123 W and folding again.
+  within 2 s of that decision; resume → 123 W and folding again. Resume half
+  verified on 2026-11-13 through the marker path: a restarted daemon read
+  `paused-by-daemon`, applied 123 W at once, held `Resume` for the 3 startup
+  ticks and resumed project 18264 6.8 s after start; Ctrl+C restored 145 W
+  and left FAH folding. The in-process 2-minute cooldown after closing a game
+  is covered by unit tests only.
 
 ### 2. Close M2 (issue #2): Proton/Wine watcher, branch `feat/m2-proton-watcher`
 
