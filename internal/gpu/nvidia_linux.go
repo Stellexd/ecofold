@@ -353,5 +353,8 @@ func NewProvider() Provider {
 }
 
 func fmtError(op string, ret nvml.Return) error {
+	if ret == nvml.ERROR_NO_PERMISSION {
+		return fmt.Errorf("%s failed: %s: %w", op, nvml.ErrorString(ret), ErrNoPermission)
+	}
 	return fmt.Errorf("%s failed: %s", op, nvml.ErrorString(ret))
 }
