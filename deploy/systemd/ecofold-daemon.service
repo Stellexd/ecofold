@@ -1,0 +1,44 @@
+# EcoFold daemon unit. DRAFT: not yet verified on CachyOS; see the checklist
+# in docs/DAEMON_PLAN.md section 6 before installing.
+
+[Unit]
+Description=EcoFold GPU power daemon
+After=nvidia-persistenced.service docker.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/ecofold-daemon
+# Last line of defense: restores the default power limit from a fresh process
+# even after SIGKILL, OOM or a hung NVML call.
+ExecStopPost=/usr/bin/ecofold-daemon -restore-power-limit
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+# Least privilege: only CAP_SYS_ADMIN (NVML power limits). If NVML still
+# returns NO_PERMISSION, switch to User=root and keep the bounding set and the
+# sandbox below.
+User=ecofold
+Group=ecofold
+SupplementaryGroups=video
+AmbientCapabilities=CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_SYS_ADMIN
+NoNewPrivileges=yes
+
+# Holds the pause-ownership marker; kept across Restart=, cleared on reboot.
+RuntimeDirectory=ecofold
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=restart
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+DevicePolicy=closed
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia0 rw
+DeviceAllow=/dev/nvidia-uvm rw
+
+[Install]
+WantedBy=multi-user.target

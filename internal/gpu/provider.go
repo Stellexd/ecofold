@@ -3,9 +3,15 @@
 package gpu
 
 import (
+	"errors"
 	"fmt"
 	"math"
 )
+
+// ErrNoPermission is wrapped by provider errors when the driver rejects a
+// call because the process lacks the privileges to change device settings
+// (NVML_ERROR_NO_PERMISSION). Callers can detect it with errors.Is.
+var ErrNoPermission = errors.New("gpu: insufficient permissions")
 
 // Telemetry represents a snapshot of GPU metrics using integer units for UI consumption.
 type Telemetry struct {

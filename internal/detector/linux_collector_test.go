@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"strings"
 	"testing"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
@@ -259,8 +258,8 @@ func TestLinuxCollectorRejectsUnsupportedUtilization(t *testing.T) {
 	if err == nil {
 		t.Fatal("se esperaba error cuando SMUtilValid=false para todos los procesos")
 	}
-	if !strings.Contains(err.Error(), "per-process GPU utilization not supported") {
-		t.Fatalf("err = %v, se esperaba 'per-process GPU utilization not supported'", err)
+	if !errors.Is(err, ErrPerProcessUtilUnsupported) {
+		t.Fatalf("err = %v, se esperaba ErrPerProcessUtilUnsupported", err)
 	}
 }
 

@@ -6,6 +6,7 @@
 package detector
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
@@ -15,13 +16,13 @@ import (
 type OperatingState string
 
 const (
-	// StateFolding indicates that folding can run at the normal power limit
-	// (100% of TDP by default).
+	// StateFolding indicates that folding can run on wall power. On Linux the
+	// daemon applies the configured eco watt limit while folding.
 	StateFolding OperatingState = "folding"
 
-	// StateFoldingEco indicates that folding can run, but a low-power profile is
-	// recommended. On macOS this is used when folding with sufficient battery;
-	// on Linux, the daemon applies the configured watt limit.
+	// StateFoldingEco indicates that folding can run on battery with sufficient
+	// charge (macOS). The Linux collector reports no battery, so it never
+	// produces this state; the daemon treats it like StateFolding.
 	StateFoldingEco OperatingState = "folding_eco"
 
 	// StatePausedBattery indicates that folding must be paused because the battery
@@ -32,6 +33,13 @@ const (
 	// load was detected (for example, an active game).
 	StatePausedLoad OperatingState = "paused_load"
 )
+
+// ErrPerProcessUtilUnsupported is returned by a collector when the GPU driver
+// lists graphics processes but cannot attribute utilization to any of them.
+// Without per-process samples a game cannot be told apart from Folding@home,
+// so callers must treat game detection as unavailable rather than as "no
+// load".
+var ErrPerProcessUtilUnsupported = errors.New("detector: per-process GPU utilization not supported")
 
 // Config groups the thresholds that govern state decisions. The default values
 // are documented and can be obtained with DefaultConfig.

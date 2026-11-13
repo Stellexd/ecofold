@@ -304,7 +304,13 @@ func BuildSnapshotFromPlists(battRaw, gpuRaw []byte) (SystemSnapshot, error) {
 		return SystemSnapshot{}, fmt.Errorf("gpu: %w", err)
 	}
 
-	snap := SystemSnapshot{
+	return snapshotFromMetrics(batt, gpu), nil
+}
+
+// snapshotFromMetrics combines parsed battery and GPU metrics into a
+// SystemSnapshot.
+func snapshotFromMetrics(batt BatteryMetrics, gpu GPUMetrics) SystemSnapshot {
+	return SystemSnapshot{
 		HasBattery:         batt.HasBattery,
 		OnAC:               batt.OnAC,
 		IsCharging:         batt.IsCharging,
@@ -321,8 +327,6 @@ func BuildSnapshotFromPlists(battRaw, gpuRaw []byte) (SystemSnapshot, error) {
 		GPUTilerUtilPct:    gpu.GPUTilerUtilPct,
 		GPUInUseMemMiB:     gpu.GPUInUseMemMiB,
 	}
-
-	return snap, nil
 }
 
 // FetchIOReg runs `ioreg -a -r -d 1 -c <class>` and returns the XML output.
@@ -330,7 +334,18 @@ func BuildSnapshotFromPlists(battRaw, gpuRaw []byte) (SystemSnapshot, error) {
 // output is rejected by the parsers' size guard instead of being buffered
 // whole. It is only available on darwin.
 func FetchIOReg(class string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	return FetchIORegContext(context.Background(), class)
+}
+
+// fetchIORegTimeout bounds a single ioreg run when the caller's context has
+// no earlier deadline.
+const fetchIORegTimeout = 2 * time.Second
+
+// FetchIORegContext is FetchIOReg bounded by ctx: ioreg is killed when ctx is
+// canceled or its deadline passes, and never runs longer than
+// fetchIORegTimeout.
+func FetchIORegContext(ctx context.Context, class string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, fetchIORegTimeout)
 	defer cancel()
 
 	var stderr bytes.Buffer
