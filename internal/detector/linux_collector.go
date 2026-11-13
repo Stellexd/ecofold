@@ -120,7 +120,7 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 			}
 		}
 		if allInvalid {
-			return SystemSnapshot{}, errors.New("detector: per-process GPU utilization not supported")
+			return SystemSnapshot{}, ErrPerProcessUtilUnsupported
 		}
 	}
 
