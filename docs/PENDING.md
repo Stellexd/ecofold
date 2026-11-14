@@ -5,7 +5,8 @@ it, then move it to `docs/archive/PENDING_HISTORY.md` when the section is
 done. Finished work and its context (M1 review, chaos passes, daemon loop):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-13 (after the daemon chaos pass, `CHAOS_REPORT_M3.md`).
+Last updated: 2026-11-14 (creative-app policy decided; R3 and R4 fixed in
+`fix/m2-detector-bounds`).
 
 ## Road to v0.1.0
 
@@ -33,13 +34,15 @@ Branch `feat/m2-proton-watcher`.
 - [ ] Detection layer 2: `wineserver`, `reaper` and `.exe` payloads as a game
   signal, reading `/proc` once per tick (no shell commands).
 - [ ] Share the existing cooldown latch with layer 1.
-- [ ] Filter Electron helpers: add `discord` and other Electron binaries to
-  `browserBinaries` in `linux_collector.go`, so `isBrowserHelper` drops their
-  `--type=renderer` and `--type=gpu-process` processes. Found on CachyOS:
-  Discord's renderer is listed by NVML as a graphics process.
+- [x] Filter Electron helpers: `electron`, `discord`, `slack`, `code` and
+  `spotify` added to `browserBinaries` in `linux_collector.go`, so
+  `isBrowserHelper` drops their `--type=renderer` and `--type=gpu-process`
+  processes (`fix/m2-detector-bounds`). Found on CachyOS: Discord's renderer
+  is listed by NVML as a graphics process. Verify on hardware during the
+  matrix run.
 - [ ] Run the app compatibility matrix below and calibrate the thresholds
   (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`.
-- [ ] **R3** and **R4** decided or fixed (see "Open risks").
+- [x] **R3** and **R4** fixed in `fix/m2-detector-bounds` (see "Open risks").
 
 #### App compatibility matrix
 
@@ -50,7 +53,7 @@ ignore list and the thresholds.
 | --- | --- |
 | **Ignore**: launchers, chat, browsers, Electron/CEF helpers | Never pause, even with VRAM held |
 | **Load**: games | Pause after the 3-tick sustain, resume after cooldown |
-| **Load?**: creative/GPU-compute apps | Decision pending (see below) |
+| **Load**: creative/GPU-compute apps under sustained load | Same as games; folding continues while they sit idle below the thresholds |
 
 | App | Class | Where to test | Notes |
 | --- | --- | --- | --- |
@@ -58,10 +61,10 @@ ignore list and the thresholds.
 | Steam client / steamwebhelper | Ignore | CachyOS | Already ignored |
 | Riot Client / League of Legends launcher | Ignore (launcher) / Load (game) | Windows only | Riot Vanguard blocks Linux, so EcoFold never sees LoL on Linux; measure only |
 | Epic Games Launcher, Battle.net, EA app (via Proton/Lutris/Heroic) | Ignore | CachyOS | CEF launchers; check process names under Wine |
-| Adobe Photoshop | Load? | macOS (native, `DarwinCollector`); Windows to measure | No native Linux build |
-| Adobe Premiere Pro (export, playback) | Load? | macOS (native); Windows to measure | No native Linux build |
-| DaVinci Resolve, Blender (render) | Load? | CachyOS (native) | Native Linux NVIDIA apps: the best real test for the "Load?" class |
-| OBS (NVENC recording) | Load? | CachyOS | Uses the encoder more than SM; check `enc` vs `sm` |
+| Adobe Photoshop | Load | macOS (native, `DarwinCollector`); Windows to measure | No native Linux build |
+| Adobe Premiere Pro (export, playback) | Load | macOS (native); Windows to measure | No native Linux build |
+| DaVinci Resolve, Blender (render) | Load | CachyOS (native) | Native Linux NVIDIA apps: the best real test for the creative "Load" class |
+| OBS (NVENC recording) | Load | CachyOS | Uses the encoder more than SM; check `enc` vs `sm` |
 | Baldur's Gate 3 | Load | CachyOS | Verified 2026-11-13: 55-59 % SM, paused |
 | Crimson Desert, Deadlock | Load | CachyOS | Pending |
 | Video playback in a browser | Ignore | CachyOS, macOS | Hardware decode must not pause |
@@ -76,11 +79,15 @@ How to measure:
   have no Linux version. Use it to set thresholds and process names; it does
   not test the daemon. A Windows port is out of scope for `v0.1.0`.
 
-Open decision: should heavy creative/compute apps (Premiere export,
-Photoshop GPU filters, Blender renders) pause folding? Today any non-ignored
-process above the thresholds pauses it, which favors the user's foreground
-work. The alternative is a games-only policy with an opt-in list. Decide
-before calibrating.
+Decision (2026-11-14): heavy creative and productivity apps (Blender,
+Premiere, Resolve, Photoshop) **pause folding** when they put sustained load
+on the GPU (rendering, exporting, 3D/compute acceleration) above the
+evaluator thresholds, exactly like a game. While they are open but idle below
+the utilization threshold, folding continues. No games-only list: the
+evaluator stays app-agnostic and the user's foreground work wins. On Linux,
+Chromium/Electron/CEF helpers that are not real load (Discord, Slack, VS Code,
+Spotify) are filtered through `browserBinaries` / `DefaultIgnoredProcesses`;
+calibrate the thresholds with this policy in mind.
 
 ### 3. M3 (issue #3): IPC and GUI
 
@@ -109,13 +116,15 @@ before calibrating.
 
 ## Open risks
 
-- [ ] **R3 `GPUUtilThresholdPct = 100` plus a huge `GPUMemThresholdMiB`.**
-  Both values are in range, but together 99 % utilization never pauses.
-  Pinned by `TestMaxUtilThresholdPlusHugeMemDisablesPause`. Decide an upper
-  bound for `GPUMemThresholdMiB` or the utilization threshold.
-- [ ] **R4 Transient empty `AppleSmartBattery` output folds at full power.**
-  An empty array is treated as a desktop Mac. Cache `HasBattery` from the
-  first successful read and treat a later empty result as an error.
+- [x] **R3 `GPUUtilThresholdPct = 100` plus a huge `GPUMemThresholdMiB`.**
+  Fixed: `NewEvaluator` resets `GPUMemThresholdMiB > 65536` (64 GiB) to 1500.
+  Pinned by `TestMaxUtilThresholdPlusHugeMemStillPauses` and
+  `TestMemThresholdUpperBound`.
+- [x] **R4 Transient empty `AppleSmartBattery` output folds at full power.**
+  Fixed: once a read reports `HasBattery=true`, `DarwinCollector` returns
+  `ErrBatteryVanished` for a later empty array, so the daemon keeps its last
+  decision and retries. Pinned by
+  `TestDarwinCollectorBatteryVanishedIsTransient`.
 - [ ] **M2-BLOCK fallback.** Drivers without per-process utilization now
   latch the daemon into `Degraded` (no game detection, default limit). A
   fallback detector (process-name heuristic from layer 2) would restore game
@@ -131,6 +140,9 @@ before calibrating.
 
 - [ ] Publish the FAH container on `127.0.0.1:7396:7396` instead of
   `0.0.0.0:7396`: today any host on the LAN can pause or reconfigure FAH.
-- [ ] Delete merged branches (`test/m1-chaos*`, `test/m1-nvml-integration`,
+- [x] Delete merged branches (`test/m1-chaos*`, `test/m1-nvml-integration`,
   `revert-8-test/m1-nvml-integration`, `fix/m1-ch11-nvml-lifecycle`) and the
-  agent worktrees in `.claude/worktrees/`.
+  agent worktrees in `.claude/worktrees/` (done 2026-11-14 on macOS). The
+  CachyOS checkout `~/Documents/GitHub/ecofoldGPU` still sits on
+  `fix/m1-ch11-nvml-lifecycle`: switch it to `develop` and delete the branch
+  there.
