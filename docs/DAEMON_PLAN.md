@@ -412,7 +412,7 @@ NoNewPrivileges=yes
 
 RuntimeDirectory=ecofold
 RuntimeDirectoryMode=0750
-RuntimeDirectoryPreserve=restart
+RuntimeDirectoryPreserve=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
@@ -443,6 +443,16 @@ Found during check 6: the legacy `autofold.service` runs as a **user** unit
 misses it. With both running, autofold froze the FAH container with
 `docker pause` and EcoFold's API calls timed out. Packaging must disable it
 (`systemctl --user disable --now autofold`).
+
+Found during the layer 2 end-to-end test (2026-11-14): with
+`RuntimeDirectoryPreserve=restart`, a `systemctl stop` + `start` while a game
+held a pause (the reinstall script) deleted `/run/ecofold`. The new daemon saw
+FAH paused without a marker, treated it as a user pause and never resumed it;
+the power side recovered (123 W after the cooldown). The unit now uses
+`RuntimeDirectoryPreserve=yes`: the marker survives stop/start and is still
+cleared on reboot (`/run` is tmpfs). Trade-off: if the user pauses FAH by hand
+while the daemon is stopped and a stale marker exists, the next start resumes
+that pause.
 
 Original checklist, in order:
 1. `SetPowerManagementLimit` works as `User=ecofold` with only

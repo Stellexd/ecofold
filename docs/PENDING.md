@@ -24,7 +24,9 @@ Unit: `deploy/systemd/ecofold-daemon.service`. Verified 2026-11-14; details in
 - [x] `/proc/<pid>/comm` and `cmdline` of user processes are readable under
   `ProtectSystem=strict`; `DeviceAllow` paths match `ls /dev/nvidia*`.
 - [x] `RuntimeDirectoryPreserve=restart` keeps `/run/ecofold` across
-  `Restart=`.
+  `Restart=`, but not across `stop` + `start`: a reinstall during a game left
+  FAH paused for good. Now `RuntimeDirectoryPreserve=yes`; re-verify on
+  CachyOS with a stop/start during a game.
 - [x] Closing Baldur's Gate 3 ends the 2 min cooldown with 123 W and FAH
   folding.
 

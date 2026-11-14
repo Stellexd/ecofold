@@ -24,10 +24,12 @@ Group=root
 CapabilityBoundingSet=CAP_SYS_ADMIN
 NoNewPrivileges=yes
 
-# Holds the pause-ownership marker; kept across Restart=, cleared on reboot.
+# Holds the pause-ownership marker. "yes" keeps it across stop/start too (a
+# package upgrade during a game), not only Restart=; /run is tmpfs, so a
+# reboot still clears it.
 RuntimeDirectory=ecofold
 RuntimeDirectoryMode=0750
-RuntimeDirectoryPreserve=restart
+RuntimeDirectoryPreserve=yes
 
 ProtectSystem=strict
 ProtectHome=yes
