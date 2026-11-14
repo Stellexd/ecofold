@@ -80,6 +80,7 @@ type modelFAH struct {
 	resumeWhileUserPaused bool
 	resumeLimit           []int
 	pauseCalls            int
+	resumeCalls           int
 	gpu                   *modelGPU
 }
 
@@ -116,6 +117,7 @@ func (f *modelFAH) Pause(ctx context.Context) error {
 func (f *modelFAH) Resume(ctx context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.resumeCalls++
 	if f.pausedBy == "user" {
 		f.resumeWhileUserPaused = true
 	}
@@ -189,8 +191,36 @@ func (r *chaosRun) restart(clean bool) {
 }
 
 func (r *chaosRun) tick(snap detector.SystemSnapshot, err error) {
+	inherited := r.d.resumeHold > 0 && r.d.pausedByUs && !r.d.degraded
+	r.gpu.mu.Lock()
+	opsBefore := len(r.gpu.ops)
+	r.gpu.mu.Unlock()
+	r.fah.mu.Lock()
+	resumesBefore := r.fah.resumeCalls
+	r.fah.mu.Unlock()
+
 	r.col.set(snap, err)
 	r.d.tick(context.Background())
+
+	if inherited {
+		r.gpu.mu.Lock()
+		ops := append([]string(nil), r.gpu.ops[opsBefore:]...)
+		r.gpu.mu.Unlock()
+		for _, op := range ops {
+			// I7: an inherited pause keeps the default limit during the
+			// startup hold; a game may still be running.
+			if op == "set" {
+				r.t.Fatalf("I7: SetPowerLimit durante la espera de arranque con pausa heredada")
+			}
+		}
+		r.fah.mu.Lock()
+		resumed := r.fah.resumeCalls > resumesBefore
+		r.fah.mu.Unlock()
+		// I8: an inherited pause is never resumed before the hold ends.
+		if resumed {
+			r.t.Fatalf("I8: Resume durante la espera de arranque con pausa heredada")
+		}
+	}
 	r.checkTick()
 }
 
@@ -270,10 +300,17 @@ func (r *chaosRun) step(b byte) {
 			r.tick(detector.SystemSnapshot{}, errors.New("collect: transient"))
 		}
 	case 10:
-		if b>>4 == 0x0f { // rare: unsupported per-process utilization
+		switch {
+		case b>>4 == 0x0f: // rare: unsupported per-process utilization
 			r.tick(detector.SystemSnapshot{}, detector.ErrPerProcessUtilUnsupported)
-		} else {
-			r.tick(snapIdle, nil)
+		case b&0x10 != 0: // game in its session, with load
+			for i := 0; i < reps; i++ {
+				r.tick(snapGameLoad, nil)
+			}
+		default: // same game idle in a menu, session still live
+			for i := 0; i < reps*4; i++ {
+				r.tick(snapGameMenu, nil)
+			}
 		}
 	case 11:
 		r.fah.mu.Lock()
@@ -302,6 +339,23 @@ func (r *chaosRun) step(b byte) {
 		r.tick(snapLoad, nil)
 	}
 }
+
+const modelSession = "steam:1422450/90/1000"
+
+var (
+	snapGameLoad = detector.SystemSnapshot{
+		OnAC:               true,
+		GPUProcesses:       []gpu.ProcessInfo{{PID: 100, UsedVRAMMiB: 4096, SMUtilPct: 60, SMUtilValid: true}},
+		GPUProcessSessions: map[uint32]string{100: modelSession},
+		LiveGameSessions:   []string{modelSession},
+	}
+	snapGameMenu = detector.SystemSnapshot{
+		OnAC:               true,
+		GPUProcesses:       []gpu.ProcessInfo{{PID: 100, UsedVRAMMiB: 512, SMUtilPct: 3, SMUtilValid: true}},
+		GPUProcessSessions: map[uint32]string{100: modelSession},
+		LiveGameSessions:   []string{modelSession},
+	}
+)
 
 func toggle(err error, msg string) error {
 	if err != nil {
@@ -351,6 +405,7 @@ func FuzzDaemonInvariants(f *testing.F) {
 	f.Add([]byte{0x3c, 0x07, 0x00, 0x24, 0x24, 0x3c})             // NO_PERMISSION
 	f.Add([]byte{0x0c, 0x07, 0x00, 0x0c, 0x0e, 0x07})             // restore failures + crash
 	f.Add([]byte{0x24, 0x24, 0xfa, 0xf0, 0x07, 0x00})             // Degraded while paused
+	f.Add([]byte{0x1a, 0x1a, 0x1a, 0xea, 0x0e, 0x0a, 0xf0})       // game session, crash in the menu
 	f.Fuzz(func(t *testing.T, events []byte) {
 		if len(events) > 512 {
 			events = events[:512]
