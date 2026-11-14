@@ -79,7 +79,7 @@ func run() int {
 	cfg.Tick = *tick
 	cfg.EcoWatts = *ecoWatts
 	cfg.RuntimeDir = *runtimeDir
-	cfg.StartupHoldTicks = detCfg.SustainedTicksRequired
+	cfg.StartupHoldTicks = detCfg.CooldownTicksRequired
 	cfg.Logger = logger
 
 	d, err := daemon.New(cfg, daemon.Deps{

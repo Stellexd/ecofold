@@ -7,8 +7,11 @@ Decisions taken on 2026-11-13: F2 reword the E2E check; F3 periodic `ioreg`
 allowed (skill amended); F7 power first in both directions, and `Resume` only
 after the eco cap succeeds (or power limits are unsupported); §3.6 never
 resume FAH on exit, keep the marker. Added during implementation:
-`StartupHoldTicks` (a pause inherited through the marker is not resumed until
-the evaluator has seen `SustainedTicksRequired` snapshots), startup restore of
+`StartupHoldTicks` (a pause inherited through the marker is not resumed, and
+the GPU keeps the default limit, until the evaluator has seen
+`CooldownTicksRequired` snapshots; it was `SustainedTicksRequired` until the
+2026-11-14 CachyOS test showed a restart during a game capping it and resuming
+folding after 6 s), startup restore of
 the default limit (an unknown limit left by a crash is normalized), and
 `gpu.ErrNoPermission` so NO_PERMISSION can be detected with `errors.Is`.
 
@@ -453,6 +456,15 @@ the power side recovered (123 W after the cooldown). The unit now uses
 cleared on reboot (`/run` is tmpfs). Trade-off: if the user pauses FAH by hand
 while the daemon is stopped and a stale marker exists, the next start resumes
 that pause.
+
+Re-verified the same day: `stop` + `start` with Deadlock running started with
+`paused_by_daemon=true` and the daemon itself resumed folding. The same run
+showed that the restarted daemon capped the GPU to 123 W on its first tick and
+resumed folding after the 3-tick startup hold, because a restart loses the
+evaluator's cooldown. `StartupHoldTicks` now equals `CooldownTicksRequired`
+(60 ticks, 2 min) and the default limit stays in place during the hold
+(`TestRestartDuringGameKeepsDefaultLimit`). Cost: if FAH was resumed by hand
+while a stale marker exists, it folds uncapped for up to 2 minutes.
 
 Original checklist, in order:
 1. `SetPowerManagementLimit` works as `User=ecofold` with only
