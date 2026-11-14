@@ -64,10 +64,11 @@ Branch `feat/m2-proton-watcher`.
 - [x] User pause list (`-pause-processes`, `ParsePauseProcesses`): matching
   processes stop folding while they run, whatever their GPU use. Expose it in
   the M3 GUI and socket.
-- [ ] Verify compute contention end to end with the daemon installed (FAH
-  really pauses, the render speeds up, folding resumes 2 min after it ends),
-  and check that mpv/VLC with CUDA decoding (`hwdec=nvdec`) does not count
-  as compute contention.
+- [x] Compute contention end to end on CachyOS with the daemon installed:
+  an OptiX render paused FAH within 6 s (145 W), Blender rose from 0-20 % to
+  66-79 % SM, and folding resumed 2 min after the render ended (123 W).
+- [ ] Check that mpv/VLC with CUDA decoding (`hwdec=nvdec`) does not count as
+  compute contention.
 - [ ] Run the app compatibility matrix below and calibrate the thresholds
   (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`. A 40-minute
   run on 2026-11-14 covered only LibreWolf (max 22 % SM, 293 MiB) and
@@ -169,6 +170,13 @@ always stop folding.
   `ErrBatteryVanished` for a later empty array, so the daemon keeps its last
   decision and retries. Pinned by
   `TestDarwinCollectorBatteryVanishedIsTransient`.
+- [ ] **R5 CPU-only renders pause folding.** An app with a CUDA context that
+  renders on the CPU (Blender Cycles on CPU: ~1140 % CPU, 1487 MiB, GPU at
+  0 %) matches the compute-contention rule, so FAH pauses with an idle GPU.
+  Accepted for `v0.1.0` (costs folding time only). Fix idea: require a drop of
+  the FAH core's own SM (it fell from ~95 % to 49-80 % under the OptiX render
+  and does not move under a CPU render); calibrate against its normal 75-98 %
+  swing.
 - [ ] **M2-BLOCK fallback.** Drivers without per-process utilization now
   latch the daemon into `Degraded` (no game detection, default limit). A
   fallback detector would restore game detection on those systems. Layer 2

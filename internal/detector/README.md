@@ -110,8 +110,17 @@ or an SM sample above 0. Blender used ~1070 % CPU rendering and 0-1 % at rest
 (335-437 MiB), so an idle app that keeps its CUDA context does not pause
 folding. Verified with the sampler on CachyOS: idle Blender kept folding for a
 minute, and F12 paused it within 4 s, on the CPU signal before any SM sample.
-Once folding pauses, the app gets the GPU. The FAH core is compute too and is
-removed by the ignore list.
+Once folding pauses, the app gets the GPU: with the installed daemon, Blender
+rose from 0-20 % to 66-79 % SM, and folding resumed 2 minutes after the render
+ended. The FAH core is compute too and is removed by the ignore list.
+
+Known false positive: a **CPU-only** render in an app that holds a CUDA context
+(Blender with Cycles set to CPU: ~1140 % CPU, 1487 MiB, GPU at 0 %) looks the
+same and also pauses folding, although FAH was not in its way. It costs folding
+time, not user experience. The signal that tells them apart is the FAH core's
+own SM, which drops under real contention (from ~95 % to 49-80 % during the
+OptiX render) and stays put under a CPU render; it needs calibration because
+FahCore varies between about 75 and 98 % on its own.
 
 ### User pause list (Linux)
 
@@ -181,6 +190,8 @@ The caller must then keep its previous decision.
 - The thresholds (45% / 25% / 1500 MiB) have not yet been calibrated under real load.
 - Linux GPUs/drivers without per-process utilization cannot detect games yet
   (`M2-BLOCK` in `docs/PENDING.md`).
+- CPU-only renders in apps that keep a CUDA context pause folding (see
+  "Compute contention").
 - Layer 2 does not restore game detection on drivers without per-process
   utilization (`M2-BLOCK`): sessions only hold a pause that layer 1 started.
 - The battery-less desktop fixture is synthetic (there is no real Mac Studio dump).
