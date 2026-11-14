@@ -179,6 +179,17 @@ type SystemSnapshot struct {
 	// zero: the Folding@home core keeps the device busy, so those aggregates are
 	// contaminated and would pause folding permanently.
 	GPUProcesses []gpu.ProcessInfo
+
+	// GPUProcessSessions maps the PID of a GPUProcesses entry to the game
+	// session it belongs to (detection layer 2, Linux only): a Steam launch or
+	// a Wine/Proton .exe. Processes outside a game session have no entry. It
+	// is nil when no GPU process belongs to a session and on macOS.
+	GPUProcessSessions map[uint32]string
+
+	// LiveGameSessions lists the game sessions seen by the collector that are
+	// still running this tick. A load pause caused by a process of one of
+	// these sessions is held until the session ends.
+	LiveGameSessions []string
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
@@ -190,8 +201,15 @@ type Evaluator struct {
 	highLoadStreak int
 	lowLoadStreak  int
 	loadPaused     bool
-	cfg            Config
+	// heldSessions are the game sessions whose processes caused the current
+	// load streak or pause. While one of them is live, the cooldown waits.
+	heldSessions map[string]struct{}
+	cfg          Config
 }
+
+// maxHeldSessions bounds heldSessions. Only sessions with a process above the
+// thresholds are added, so a handful is the realistic maximum.
+const maxHeldSessions = 32
 
 // NewEvaluator creates an evaluator with the given configuration. Invalid or
 // overly conservative values are clamped to defaults: GPUUtilThresholdPct <= 25
@@ -247,7 +265,11 @@ func NewEvaluator(cfg Config) *Evaluator {
 //
 // After a load pause, the evaluator latches the decision and keeps returning
 // StatePausedLoad until CooldownTicksRequired consecutive load-free ticks have
-// elapsed. Any load tick during the cooldown restarts it. The cooldown does not
+// elapsed. Any load tick during the cooldown restarts it. If a process that
+// counted as load belongs to a game session (GPUProcessSessions), the cooldown
+// does not start while that session is in LiveGameSessions: a game in a menu
+// or loading screen keeps folding paused, and the cooldown starts when the
+// game exits. Sessions never start a pause on their own. The cooldown does not
 // delay StatePausedBattery or its recovery. If the battery itself demands a
 // pause while the load latch is active, StatePausedBattery is returned instead
 // (it has no cooldown and reflects the independent, higher-priority reason).
@@ -258,7 +280,7 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	defer e.mu.Unlock()
 
 	batteryPause := s.HasBattery && !s.OnAC && (!e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct)
-	isHighLoad := e.isHighLoad(s)
+	isHighLoad, sessions := e.isHighLoad(s)
 
 	switch {
 	case isHighLoad:
@@ -269,8 +291,13 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 		if e.highLoadStreak >= e.cfg.SustainedTicksRequired {
 			e.loadPaused = true
 		}
+		e.holdSessions(sessions)
 	case e.loadPaused:
 		e.highLoadStreak = 0
+		if e.sessionHeld(s.LiveGameSessions) {
+			e.lowLoadStreak = 0
+			break
+		}
 		if e.lowLoadStreak < e.cfg.CooldownTicksRequired {
 			e.lowLoadStreak++
 		}
@@ -281,6 +308,7 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	default:
 		e.highLoadStreak = 0
 		e.lowLoadStreak = 0
+		e.heldSessions = nil
 	}
 
 	if e.loadPaused {
@@ -303,29 +331,65 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	return StateFolding
 }
 
-// isHighLoad reports whether the snapshot shows sustained-capable game load.
+// isHighLoad reports whether the snapshot shows sustained-capable game load and
+// returns the game sessions of the processes that counted as load.
 // When GPUProcesses is non-nil the global device fields are ignored: the
 // collector is responsible for per-process attribution and device-wide metrics
 // are contaminated by Folding@home. When GPUProcesses is nil the macOS/global
 // path is used. It must be called with e.mu held.
-func (e *Evaluator) isHighLoad(s SystemSnapshot) bool {
+func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string) {
 	cfg := e.cfg
 	if s.GPUProcesses != nil {
+		high := false
+		var sessions []string
 		for _, proc := range s.GPUProcesses {
 			if !proc.SMUtilValid {
 				continue
 			}
-			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct {
-				return true
-			}
-			if proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
-				proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct {
-				return true
+			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct ||
+				(proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
+					proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct) {
+				high = true
+				if key, ok := s.GPUProcessSessions[proc.PID]; ok {
+					sessions = append(sessions, key)
+				}
 			}
 		}
-		return false
+		return high, sessions
 	}
 	return s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
 		(s.GPUInUseMemMiB >= cfg.GPUMemThresholdMiB &&
-			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct)
+			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct), nil
+}
+
+// holdSessions records the sessions of the processes that counted as load. It
+// must be called with e.mu held.
+func (e *Evaluator) holdSessions(sessions []string) {
+	for _, key := range sessions {
+		if e.heldSessions == nil {
+			e.heldSessions = make(map[string]struct{})
+		}
+		if len(e.heldSessions) >= maxHeldSessions {
+			return
+		}
+		e.heldSessions[key] = struct{}{}
+	}
+}
+
+// sessionHeld drops held sessions that are no longer live and reports whether
+// any remains. It must be called with e.mu held.
+func (e *Evaluator) sessionHeld(live []string) bool {
+	if len(e.heldSessions) == 0 {
+		return false
+	}
+	alive := make(map[string]struct{}, len(live))
+	for _, key := range live {
+		alive[key] = struct{}{}
+	}
+	for key := range e.heldSessions {
+		if _, ok := alive[key]; !ok {
+			delete(e.heldSessions, key)
+		}
+	}
+	return len(e.heldSessions) > 0
 }

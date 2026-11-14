@@ -78,6 +78,9 @@ type LinuxCollector struct {
 	ignored  []string
 	// readFile is the /proc read seam. Production uses os.ReadFile.
 	readFile func(string) ([]byte, error)
+	// sessions are the game sessions (layer 2) seen so far, pruned every
+	// Collect once their anchor process exits.
+	sessions map[string]sessionAnchor
 }
 
 // NewLinuxCollector returns a collector backed by p with the default ignore
@@ -132,6 +135,7 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 	}
 
 	kept := make([]gpu.ProcessInfo, 0, len(procs))
+	argvs := make(map[uint32][]string, len(procs))
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
 			return SystemSnapshot{}, err
@@ -141,14 +145,26 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 			continue
 		}
 		kept = append(kept, proc)
+		argvs[proc.PID] = c.argv(proc.PID)
 	}
+	bySession, live := c.gameSessions(argvs)
 
 	return SystemSnapshot{
-		HasBattery:   false,
-		OnAC:         true,
-		GPUClass:     tel.Name,
-		GPUProcesses: kept,
+		HasBattery:         false,
+		OnAC:               true,
+		GPUClass:           tel.Name,
+		GPUProcesses:       kept,
+		GPUProcessSessions: bySession,
+		LiveGameSessions:   live,
 	}, nil
+}
+
+// read is the /proc read seam with the os.ReadFile default.
+func (c *LinuxCollector) read(path string) ([]byte, error) {
+	if c.readFile == nil {
+		return os.ReadFile(path)
+	}
+	return c.readFile(path)
 }
 
 // isIgnored resolves a PID to a process name and reports whether it must be

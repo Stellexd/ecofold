@@ -95,6 +95,30 @@ lasts two to three minutes. It never delays `StatePausedBattery`: if the load is
 gone but the battery demands a pause during the cooldown, `StatePausedBattery`
 is returned.
 
+### Game sessions (detection layer 2, Linux)
+
+`LinuxCollector` ties each kept GPU process to a game session by walking its
+parents through `/proc/<pid>/stat` (at most 32 levels):
+
+- a Steam launch, `reaper SteamLaunch AppId=N`, covers Proton and native Steam
+  games. On CachyOS with the `steamrt64` runtime the chain is
+  `deadlock.exe → pv-adverb → srt-bwrap → reaper`;
+- outside Steam (Lutris, Heroic, plain Wine), a process whose `argv[0]` is a
+  `.exe` (Wine renames its processes, often with a Windows path such as
+  `S:\steamapps\...\deadlock.exe`) or a Wine loader running a `.exe`.
+
+The session is anchored to that process's PID and start time, so a reused PID
+or a zombie ends it. The snapshot carries `GPUProcessSessions` (PID → session)
+and `LiveGameSessions`.
+
+Sessions never start a pause. When a process that counted as load belongs to a
+session, the evaluator holds the pause while that session is live: menus and
+loading screens do not start the cooldown, and the 2-minute cooldown starts
+when the game exits. A session that never caused load (Wallpaper Engine under
+Proton, an idle launcher) holds nothing. Native apps outside Steam, such as
+Blender, have no session and resume after the normal cooldown. A game left open
+keeps folding paused for as long as it runs.
+
 `AllowBatteryFolding=false` in `Config{}` is intentional and conservative: a
 zero-value `Config{}` never folds on battery. Callers that want `true` must start
 from `DefaultConfig()`.
@@ -127,7 +151,8 @@ The caller must then keep its previous decision.
 - The thresholds (45% / 25% / 1500 MiB) have not yet been calibrated under real load.
 - Linux GPUs/drivers without per-process utilization cannot detect games yet
   (`M2-BLOCK` in `docs/PENDING.md`).
-- The Proton/Wine process watcher (detection layer 2) is not implemented yet.
+- Layer 2 does not restore game detection on drivers without per-process
+  utilization (`M2-BLOCK`): sessions only hold a pause that layer 1 started.
 - The battery-less desktop fixture is synthetic (there is no real Mac Studio dump).
 - On macOS, once a read has found a battery, a later empty `AppleSmartBattery`
   array is a transient ioreg glitch: `Collect` returns `ErrBatteryVanished`
