@@ -24,8 +24,8 @@ func FuzzNewEvaluatorConfigSpace(f *testing.F) {
 		switch {
 		case c.GPUUtilThresholdPct <= 25 || c.GPUUtilThresholdPct > 100:
 			t.Fatalf("util threshold %d out of (25,100]", c.GPUUtilThresholdPct)
-		case c.GPUMemThresholdMiB <= 0:
-			t.Fatalf("mem threshold %d <= 0", c.GPUMemThresholdMiB)
+		case c.GPUMemThresholdMiB <= 0 || c.GPUMemThresholdMiB > maxGPUMemThresholdMiB:
+			t.Fatalf("mem threshold %d out of [1,%d]", c.GPUMemThresholdMiB, maxGPUMemThresholdMiB)
 		case c.SustainedTicksRequired < 1 || c.SustainedTicksRequired > maxSustainedTicksRequired:
 			t.Fatalf("ticks %d out of [1,60]", c.SustainedTicksRequired)
 		case c.GPUMemRequiresUtilPct < 25 || c.GPUMemRequiresUtilPct > c.GPUUtilThresholdPct:

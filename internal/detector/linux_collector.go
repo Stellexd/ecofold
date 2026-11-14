@@ -42,8 +42,10 @@ var DefaultIgnoredProcesses = []string{
 	"mangohud",
 }
 
-// browserBinaries are browsers whose GPU/renderer helpers hold VRAM and
-// utilization without the user playing a game.
+// browserBinaries are browsers and Chromium/Electron/CEF desktop apps whose
+// GPU/renderer helpers hold VRAM and utilization without the user playing a
+// game. Only their --type=gpu-process/--type=renderer helpers are dropped;
+// the main process still counts if it crosses the thresholds.
 var browserBinaries = []string{
 	"chrome",
 	"chromium",
@@ -54,6 +56,11 @@ var browserBinaries = []string{
 	"brave",
 	"brave-browser",
 	"msedge",
+	"electron",
+	"discord",
+	"slack",
+	"code",
+	"spotify",
 }
 
 // LinuxCollector builds SystemSnapshot values on Linux from the GPU provider

@@ -225,6 +225,24 @@ func TestLinuxCollectorIgnoresBrowserHelpers(t *testing.T) {
 			t.Error("el content process de Firefox no fue ignorado")
 		}
 	})
+	t.Run("electron app helpers", func(t *testing.T) {
+		cases := map[string]string{
+			"Discord":  "/opt/discord/Discord\x00--type=renderer\x00",
+			"electron": "/usr/lib/electron34/electron\x00--type=gpu-process\x00",
+			"slack":    "/usr/lib/slack/slack\x00--type=gpu-process\x00",
+			"code":     "/opt/visual-studio-code/code\x00--type=renderer\x00",
+			"spotify":  "/opt/spotify/spotify\x00--type=gpu-process\x00",
+		}
+		for comm, cmdline := range cases {
+			c := collectorWith(&fakeGPU{}, map[string]string{
+				procCommPath(14):    comm + "\n",
+				procCmdlinePath(14): cmdline,
+			})
+			if ignored, _ := c.isIgnored(14); !ignored {
+				t.Errorf("el helper de %s no fue ignorado", comm)
+			}
+		}
+	})
 	t.Run("chrome main process kept", func(t *testing.T) {
 		c := collectorWith(&fakeGPU{}, map[string]string{
 			procCommPath(13):    "chrome\n",

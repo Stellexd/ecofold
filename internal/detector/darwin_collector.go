@@ -4,6 +4,7 @@ package detector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -11,6 +12,13 @@ import (
 // AppleSmartBattery reading. At the daemon's 2 s tick it refreshes the battery
 // every 30 s; the GPU is read on every call because game detection needs it.
 const DefaultBatteryRefreshTicks = 15
+
+// ErrBatteryVanished is returned by DarwinCollector.Collect when
+// AppleSmartBattery reports no battery after an earlier read found one. A
+// MacBook does not lose its battery at runtime, so the empty result is a
+// transient ioreg glitch; reporting it as a desktop Mac on AC would fold at
+// full power on battery (R4).
+var ErrBatteryVanished = errors.New("detector: battery vanished after it was seen")
 
 // DarwinCollector builds SystemSnapshot values on macOS from ioreg output.
 //
@@ -28,6 +36,8 @@ type DarwinCollector struct {
 	calls        int
 	batt         BatteryMetrics
 	battValid    bool
+	// seenBattery latches once any read reports HasBattery=true.
+	seenBattery bool
 }
 
 // NewDarwinCollector returns a collector that runs /usr/sbin/ioreg.
@@ -43,7 +53,9 @@ func NewDarwinCollector() *DarwinCollector {
 //
 // Any fetch or parse error is returned instead of an empty snapshot: the
 // caller must keep its previous decision rather than feed "no load" to the
-// evaluator. A failed battery refresh is retried on the next call.
+// evaluator. A failed battery refresh is retried on the next call. An empty
+// AppleSmartBattery result after a battery was seen returns
+// ErrBatteryVanished.
 func (c *DarwinCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return SystemSnapshot{}, err
@@ -64,6 +76,11 @@ func (c *DarwinCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 			c.battValid = false
 			return SystemSnapshot{}, fmt.Errorf("detector: battery: %w", err)
 		}
+		if !batt.HasBattery && c.seenBattery {
+			c.battValid = false
+			return SystemSnapshot{}, ErrBatteryVanished
+		}
+		c.seenBattery = c.seenBattery || batt.HasBattery
 		c.batt, c.battValid = batt, true
 		c.calls = 0
 	}

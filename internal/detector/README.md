@@ -81,7 +81,7 @@ Default values (`DefaultConfig`):
 The `NewEvaluator` constructor clamps invalid or overly aggressive values to
 defaults; for example, `GPUUtilThresholdPct <= 25` is forced to 45% so that the
 ~24% idle level is not mistaken for a game. The clamps are: `GPUUtilThresholdPct
-<= 25` or `> 100` → 45, `GPUMemThresholdMiB <= 0` → 1500,
+<= 25` or `> 100` → 45, `GPUMemThresholdMiB <= 0` or `> 65536` → 1500,
 `SustainedTicksRequired <= 0` or `> 60` → 3, `GPUMemRequiresUtilPct < 25` or
 `> GPUUtilThresholdPct` → 25, `MinBatteryPct < 0` or `> 100` → 50, and
 `CooldownTicksRequired < 60` → 60 or `> 90` → 90.
@@ -110,8 +110,9 @@ no-CGO stub. For every graphics process it reads `/proc/<pid>/comm` and
   prefix match): the Folding@home core and client, desktop compositors, Steam,
   and overlays such as MangoHud. `gamescope` is deliberately **not** ignored
   because games can run inside it;
-- browser GPU/renderer helpers (`--type=gpu-process`, `--type=renderer`,
-  Firefox `-contentproc`);
+- GPU/renderer helpers (`--type=gpu-process`, `--type=renderer`, Firefox
+  `-contentproc`) of browsers and Electron/CEF apps (`electron`, Discord,
+  Slack, VS Code, Spotify). Their main process is kept;
 - PIDs that vanished between the NVML query and the `/proc` read.
 
 Unreadable identity (permission denied, empty name) is fail-closed: the process
@@ -128,6 +129,9 @@ The caller must then keep its previous decision.
   (`M2-BLOCK` in `docs/PENDING.md`).
 - The Proton/Wine process watcher (detection layer 2) is not implemented yet.
 - The battery-less desktop fixture is synthetic (there is no real Mac Studio dump).
+- On macOS, once a read has found a battery, a later empty `AppleSmartBattery`
+  array is a transient ioreg glitch: `Collect` returns `ErrBatteryVanished`
+  instead of reporting a desktop Mac on AC.
 - The `OnAC` semantics (`ExternalConnected || IPDInputPower>0`) still need to be
   confirmed with stale telemetry.
 
