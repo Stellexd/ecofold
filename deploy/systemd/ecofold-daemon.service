@@ -1,5 +1,5 @@
-# EcoFold daemon unit. DRAFT: not yet verified on CachyOS; see the checklist
-# in docs/DAEMON_PLAN.md section 6 before installing.
+# EcoFold daemon unit. Verified on CachyOS (RTX 5060, driver 620.70.06) on
+# 2026-11-14; results in docs/DAEMON_PLAN.md section 6.
 
 [Unit]
 Description=EcoFold GPU power daemon
@@ -16,13 +16,11 @@ Restart=on-failure
 RestartSec=5
 TimeoutStopSec=10
 
-# Least privilege: only CAP_SYS_ADMIN (NVML power limits). If NVML still
-# returns NO_PERMISSION, switch to User=root and keep the bounding set and the
-# sandbox below.
-User=ecofold
-Group=ecofold
-SupplementaryGroups=video
-AmbientCapabilities=CAP_SYS_ADMIN
+# NVML only accepts SetPowerManagementLimit from uid 0: a non-root user with
+# CAP_SYS_ADMIN (effective and ambient) still gets NO_PERMISSION. Run as root
+# and keep the capability bounding set and the sandbox below as the limit.
+User=root
+Group=root
 CapabilityBoundingSet=CAP_SYS_ADMIN
 NoNewPrivileges=yes
 
