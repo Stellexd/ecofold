@@ -224,10 +224,14 @@ func (p *NvidiaProvider) RestoreDefaultPowerLimit() error {
 	return nil
 }
 
-// GetGraphicsProcesses returns the list of graphics processes running on the
-// GPU, enriched with per-process SM utilization when NVML can attribute it.
-// The device-wide utilization is deliberately not used: the Folding@home core
-// keeps the GPU busy, so only per-process samples can tell a game apart.
+// GetGraphicsProcesses returns the graphics and compute processes running on
+// the GPU, enriched with per-process SM utilization when NVML can attribute
+// it. Compute processes matter because CUDA work (Blender Cycles/OptiX,
+// DaVinci Resolve, local AI models) never shows up as a graphics process; the
+// Folding@home core is compute too and is filtered by the caller's ignore
+// list. The device-wide utilization is deliberately not used: the
+// Folding@home core keeps the GPU busy, so only per-process samples can tell
+// a game apart.
 func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -235,10 +239,19 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	if p.device == nil {
 		return nil, fmt.Errorf("gpu: provider not initialized")
 	}
-	procs, ret := p.device.GetGraphicsRunningProcesses()
+	graphics, ret := p.device.GetGraphicsRunningProcesses()
 	if ret != nvml.SUCCESS {
 		return nil, fmtError("GetGraphicsRunningProcesses", ret)
 	}
+	compute, ret := p.device.GetComputeRunningProcesses()
+	switch ret {
+	case nvml.SUCCESS:
+	case nvml.ERROR_NOT_SUPPORTED:
+		compute = nil // graphics-only detection, as before
+	default:
+		return nil, fmtError("GetComputeRunningProcesses", ret)
+	}
+	procs := mergeProcessLists(graphics, compute)
 
 	utilByPID, utilValid, err := p.processUtilization()
 	if err != nil {
@@ -253,13 +266,34 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 			SMUtilValid: utilValid,
 		}
 		if utilValid {
-			// A graphics process without a fresh sample was idle during the last
+			// A process without a fresh sample was idle during the last
 			// sampling window, so 0 is a valid measurement.
 			info.SMUtilPct = utilByPID[proc.Pid]
 		}
 		result = append(result, info)
 	}
 	return result, nil
+}
+
+// mergeProcessLists joins the graphics and compute lists. A process with both
+// contexts (NVML type C+G) appears in both lists and is kept once, with the
+// larger memory figure. Order is graphics first, then new compute PIDs.
+func mergeProcessLists(graphics, compute []nvml.ProcessInfo) []nvml.ProcessInfo {
+	out := make([]nvml.ProcessInfo, 0, len(graphics)+len(compute))
+	index := make(map[uint32]int, len(graphics)+len(compute))
+	for _, list := range [][]nvml.ProcessInfo{graphics, compute} {
+		for _, proc := range list {
+			if i, ok := index[proc.Pid]; ok {
+				if proc.UsedGpuMemory > out[i].UsedGpuMemory {
+					out[i].UsedGpuMemory = proc.UsedGpuMemory
+				}
+				continue
+			}
+			index[proc.Pid] = len(out)
+			out = append(out, proc)
+		}
+	}
+	return out
 }
 
 // classifyUtilReturn maps an NVML GetProcessUtilization return code to the

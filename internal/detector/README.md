@@ -127,7 +127,7 @@ from `DefaultConfig()`.
 
 `LinuxCollector` (`linux_collector.go`) builds a `SystemSnapshot` from
 `gpu.Provider` and never calls NVML directly, so it also builds with the
-no-CGO stub. For every graphics process it reads `/proc/<pid>/comm` and
+no-CGO stub. For every graphics or compute process it reads `/proc/<pid>/comm` and
 `basename(argv[0])` from `/proc/<pid>/cmdline` and drops:
 
 - names in `DefaultIgnoredProcesses` (case-insensitive, trailing `*` is a

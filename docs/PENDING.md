@@ -50,6 +50,11 @@ Branch `feat/m2-proton-watcher`.
   processes (`fix/m2-detector-bounds`). Found on CachyOS: Discord's renderer
   is listed by NVML as a graphics process. Verify on hardware during the
   matrix run.
+- [x] Enumerate compute processes too (`GetComputeRunningProcesses`): CUDA
+  work (Blender Cycles/OptiX, DaVinci Resolve, local AI) never appears as a
+  graphics process, so it could not pause folding under the creative-app
+  policy. Found during calibration; the FAH core now shows up (89-94 % SM)
+  and stays ignored.
 - [ ] Run the app compatibility matrix below and calibrate the thresholds
   (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`.
 - [x] **R3** and **R4** fixed in `fix/m2-detector-bounds` (see "Open risks").

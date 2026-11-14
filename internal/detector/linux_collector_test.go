@@ -329,3 +329,25 @@ func TestLinuxCollectorErrors(t *testing.T) {
 		}
 	})
 }
+
+// TestLinuxCollectorIgnoresDockerFoldingCore covers the real CachyOS layout:
+// with compute processes enumerated, the FAH core from the foldingathome
+// container shows up at 97% SM and must still be filtered out.
+func TestLinuxCollectorIgnoresDockerFoldingCore(t *testing.T) {
+	prov := &fakeGPU{
+		tel:   gpu.Telemetry{Name: "NVIDIA GeForce RTX 5060"},
+		procs: []gpu.ProcessInfo{{PID: 317773, UsedVRAMMiB: 844, SMUtilPct: 97, SMUtilValid: true}},
+	}
+	c := collectorWith(prov, map[string]string{
+		procCommPath(317773):    "FahCore_27\n",
+		procCmdlinePath(317773): "/config/cores/openmm-core-27/centos-7.9.2009-64bit/release/fahcore-27-centos-7.9.2009-64bit-release-8.2.1/FahCore_27\x00-dir\x0001\x00",
+		procStatPath(317773):    statLine(317773, "FahCore_27", "S", 2155, 900),
+	})
+	snap, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(snap.GPUProcesses) != 0 {
+		t.Fatalf("GPUProcesses = %+v, se esperaba el core de FAH filtrado", snap.GPUProcesses)
+	}
+}

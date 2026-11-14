@@ -82,3 +82,31 @@ func TestClampPercent(t *testing.T) {
 		}
 	}
 }
+
+// TestMergeProcessListsDeduplicatesCPlusG pins the graphics/compute join: a
+// C+G process is kept once with the larger memory figure, and compute-only
+// processes (CUDA renders, the FAH core) are added.
+func TestMergeProcessListsDeduplicatesCPlusG(t *testing.T) {
+	graphics := []nvml.ProcessInfo{
+		{Pid: 10, UsedGpuMemory: 100}, // kwin, C+G
+		{Pid: 20, UsedGpuMemory: 300}, // game
+	}
+	compute := []nvml.ProcessInfo{
+		{Pid: 10, UsedGpuMemory: 150},
+		{Pid: 30, UsedGpuMemory: 800}, // FahCore or Blender
+		{Pid: 30, UsedGpuMemory: 900}, // second context of the same PID
+	}
+	got := mergeProcessLists(graphics, compute)
+	want := []nvml.ProcessInfo{{Pid: 10, UsedGpuMemory: 150}, {Pid: 20, UsedGpuMemory: 300}, {Pid: 30, UsedGpuMemory: 900}}
+	if len(got) != len(want) {
+		t.Fatalf("merge = %+v, se esperaba %+v", got, want)
+	}
+	for i := range want {
+		if got[i].Pid != want[i].Pid || got[i].UsedGpuMemory != want[i].UsedGpuMemory {
+			t.Fatalf("merge[%d] = %+v, se esperaba %+v", i, got[i], want[i])
+		}
+	}
+	if got := mergeProcessLists(nil, nil); len(got) != 0 {
+		t.Fatalf("listas vacías: %+v", got)
+	}
+}
