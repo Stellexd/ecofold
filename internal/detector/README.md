@@ -76,6 +76,7 @@ Default values (`DefaultConfig`):
 | `GPUMemThresholdMiB` | 1500 | In-use memory that triggers a pause together with `GPUMemRequiresUtilPct`. |
 | `GPUMemRequiresUtilPct` | 25 | Minimum utilization that must accompany high memory use. |
 | `SustainedTicksRequired` | 3 | Consecutive high-load ticks before declaring a pause. |
+| `ComputeMemThresholdMiB` | 256 | GPU memory a non-ignored compute process must hold to count as contending with FAH (see below). |
 | `CooldownTicksRequired` | 60 | Consecutive load-free ticks before folding resumes after a load pause (2 min at a 2 s tick). |
 
 The `NewEvaluator` constructor clamps invalid or overly aggressive values to
@@ -94,6 +95,44 @@ load tick restarts the count. The cooldown cannot be disabled, so it always
 lasts two to three minutes. It never delays `StatePausedBattery`: if the load is
 gone but the battery demands a pause during the cooldown, `StatePausedBattery`
 is returned.
+
+### Compute contention (Linux)
+
+The provider lists graphics **and** compute processes. CUDA work competes with
+the FAH core for SM time and loses: on CachyOS, Blender Cycles (OptiX) rendered
+at 0-20 % SM and 1424 MiB while FahCore held 61-98 %, and a longer render got
+no SM samples at all (`nvidia-smi pmon` showed `-` too). Neither the 45 % rule
+nor the 1500 MiB rule can fire. A compute process (`ProcessInfo.Compute`)
+therefore also counts as load when it holds at least `ComputeMemThresholdMiB`
+(256 MiB) **and** showed activity within the last 5 ticks: CPU use of at least
+50 % of one core (`ProcessCPUPct`, from `utime + stime` in `/proc/<pid>/stat`)
+or an SM sample above 0. Blender used ~1070 % CPU rendering and 0-1 % at rest
+(335-437 MiB), so an idle app that keeps its CUDA context does not pause
+folding. Verified with the sampler on CachyOS: idle Blender kept folding for a
+minute, and F12 paused it within 4 s, on the CPU signal before any SM sample.
+Once folding pauses, the app gets the GPU: with the installed daemon, Blender
+rose from 0-20 % to 66-79 % SM, and folding resumed 2 minutes after the render
+ended. The FAH core is compute too and is removed by the ignore list.
+
+Known false positive: a **CPU-only** render in an app that holds a CUDA context
+(Blender with Cycles set to CPU: ~1140 % CPU, 1487 MiB, GPU at 0 %) looks the
+same and also pauses folding, although FAH was not in its way. It costs folding
+time, not user experience. The signal that tells them apart is the FAH core's
+own SM, which drops under real contention (from ~95 % to 49-80 % during the
+OptiX render) and stays put under a CPU render; it needs calibration because
+FahCore varies between about 75 and 98 % on its own.
+
+### User pause list (Linux)
+
+`LinuxCollector.SetPauseProcesses` takes patterns from `ParsePauseProcesses`
+(comma-separated, case-insensitive, trailing `*` for a prefix; at most 64
+patterns of 64 characters; `*` alone, paths and anything matching the FAH
+processes are rejected). Every tick it scans `/proc` once and reports matching
+processes, by `comm` or `basename(argv[0])`, in `UserPauseMatches`. While the
+list has a match, every tick counts as load regardless of GPU use: the pause
+starts after the usual sustain and folding resumes 2 minutes after the last
+match exits. The daemon exposes it as `-pause-processes "blender,obs"` until
+the M3 GUI and socket manage it. The macOS collector ignores it.
 
 ### Game sessions (detection layer 2, Linux)
 
@@ -127,7 +166,7 @@ from `DefaultConfig()`.
 
 `LinuxCollector` (`linux_collector.go`) builds a `SystemSnapshot` from
 `gpu.Provider` and never calls NVML directly, so it also builds with the
-no-CGO stub. For every graphics process it reads `/proc/<pid>/comm` and
+no-CGO stub. For every graphics or compute process it reads `/proc/<pid>/comm` and
 `basename(argv[0])` from `/proc/<pid>/cmdline` and drops:
 
 - names in `DefaultIgnoredProcesses` (case-insensitive, trailing `*` is a
@@ -151,6 +190,8 @@ The caller must then keep its previous decision.
 - The thresholds (45% / 25% / 1500 MiB) have not yet been calibrated under real load.
 - Linux GPUs/drivers without per-process utilization cannot detect games yet
   (`M2-BLOCK` in `docs/PENDING.md`).
+- CPU-only renders in apps that keep a CUDA context pause folding (see
+  "Compute contention").
 - Layer 2 does not restore game detection on drivers without per-process
   utilization (`M2-BLOCK`): sessions only hold a pause that layer 1 started.
 - The battery-less desktop fixture is synthetic (there is no real Mac Studio dump).

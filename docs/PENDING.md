@@ -50,8 +50,29 @@ Branch `feat/m2-proton-watcher`.
   processes (`fix/m2-detector-bounds`). Found on CachyOS: Discord's renderer
   is listed by NVML as a graphics process. Verify on hardware during the
   matrix run.
+- [x] Enumerate compute processes too (`GetComputeRunningProcesses`): CUDA
+  work (Blender Cycles/OptiX, DaVinci Resolve, local AI) never appears as a
+  graphics process, so it could not pause folding under the creative-app
+  policy. Found during calibration; the FAH core now shows up (89-94 % SM)
+  and stays ignored.
+- [x] Compute contention: a non-ignored compute process with >= 256 MiB and
+  activity in the last 5 ticks (>= 50 % of a core, or an SM sample above 0)
+  counts as load, because the FAH core starves other CUDA work (a Blender
+  render got no SM samples at all next to FahCore at 71-98 %, but used
+  ~1070 % CPU). Idle Blender (335-437 MiB, 0-1 % CPU) keeps folding. Sampler
+  on CachyOS: F12 paused within 4 s, idle stayed folding.
+- [x] User pause list (`-pause-processes`, `ParsePauseProcesses`): matching
+  processes stop folding while they run, whatever their GPU use. Expose it in
+  the M3 GUI and socket.
+- [x] Compute contention end to end on CachyOS with the daemon installed:
+  an OptiX render paused FAH within 6 s (145 W), Blender rose from 0-20 % to
+  66-79 % SM, and folding resumed 2 min after the render ended (123 W).
+- [ ] Check that mpv/VLC with CUDA decoding (`hwdec=nvdec`) does not count as
+  compute contention.
 - [ ] Run the app compatibility matrix below and calibrate the thresholds
-  (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`.
+  (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`. A 40-minute
+  run on 2026-11-14 covered only LibreWolf (max 22 % SM, 293 MiB) and
+  Spectacle (17 %), with no false pause in 1200 ticks.
 - [x] **R3** and **R4** fixed in `fix/m2-detector-bounds` (see "Open risks").
 
 #### App compatibility matrix
@@ -99,6 +120,11 @@ Chromium/Electron/CEF helpers that are not real load (Discord, Slack, VS Code,
 Spotify) are filtered through `browserBinaries` / `DefaultIgnoredProcesses`;
 calibrate the thresholds with this policy in mind.
 
+Follow-up (2026-11-14): thresholds alone cannot catch CUDA work, because the
+FAH core starves it. Two design rules cover it instead of per-app tuning:
+compute contention (above) and an explicit user pause list for apps that must
+always stop folding.
+
 ### 3. M3 (issue #3): IPC and GUI
 
 - [ ] Upgrade both machines and `go.mod` to Go 1.27.4 (GO-2026-6859) before any
@@ -144,6 +170,13 @@ calibrate the thresholds with this policy in mind.
   `ErrBatteryVanished` for a later empty array, so the daemon keeps its last
   decision and retries. Pinned by
   `TestDarwinCollectorBatteryVanishedIsTransient`.
+- [ ] **R5 CPU-only renders pause folding.** An app with a CUDA context that
+  renders on the CPU (Blender Cycles on CPU: ~1140 % CPU, 1487 MiB, GPU at
+  0 %) matches the compute-contention rule, so FAH pauses with an idle GPU.
+  Accepted for `v0.1.0` (costs folding time only). Fix idea: require a drop of
+  the FAH core's own SM (it fell from ~95 % to 49-80 % under the OptiX render
+  and does not move under a CPU render); calibrate against its normal 75-98 %
+  swing.
 - [ ] **M2-BLOCK fallback.** Drivers without per-process utilization now
   latch the daemon into `Degraded` (no game detection, default limit). A
   fallback detector would restore game detection on those systems. Layer 2

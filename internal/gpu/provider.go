@@ -41,6 +41,12 @@ type ProcessInfo struct {
 	// this process. False means "unknown", never "0%": callers must not treat an
 	// unsupported sample as inactivity.
 	SMUtilValid bool
+
+	// Compute reports that the process holds a compute (CUDA/OpenCL) context.
+	// A process with both contexts (NVML type C+G) is also Compute. Compute
+	// work competes with the Folding@home core for SM time, so its own
+	// utilization stays low while folding runs.
+	Compute bool
 }
 
 // Provider abstracts GPU telemetry and power limit control across platforms.

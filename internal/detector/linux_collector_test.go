@@ -5,8 +5,11 @@ package detector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
 )
@@ -328,4 +331,130 @@ func TestLinuxCollectorErrors(t *testing.T) {
 			t.Fatal("nil provider no devolvió error")
 		}
 	})
+}
+
+// TestLinuxCollectorIgnoresDockerFoldingCore covers the real CachyOS layout:
+// with compute processes enumerated, the FAH core from the foldingathome
+// container shows up at 97% SM and must still be filtered out.
+func TestLinuxCollectorIgnoresDockerFoldingCore(t *testing.T) {
+	prov := &fakeGPU{
+		tel:   gpu.Telemetry{Name: "NVIDIA GeForce RTX 5060"},
+		procs: []gpu.ProcessInfo{{PID: 317773, UsedVRAMMiB: 844, SMUtilPct: 97, SMUtilValid: true}},
+	}
+	c := collectorWith(prov, map[string]string{
+		procCommPath(317773):    "FahCore_27\n",
+		procCmdlinePath(317773): "/config/cores/openmm-core-27/centos-7.9.2009-64bit/release/fahcore-27-centos-7.9.2009-64bit-release-8.2.1/FahCore_27\x00-dir\x0001\x00",
+		procStatPath(317773):    statLine(317773, "FahCore_27", "S", 2155, 900),
+	})
+	snap, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(snap.GPUProcesses) != 0 {
+		t.Fatalf("GPUProcesses = %+v, se esperaba el core de FAH filtrado", snap.GPUProcesses)
+	}
+}
+
+// TestLinuxCollectorUserPauseList: the pause list matches any process by comm
+// or argv[0] (comm is cut at 15 characters), never the FAH core, and is not
+// scanned when empty.
+func TestLinuxCollectorUserPauseList(t *testing.T) {
+	files := map[string]string{
+		procCommPath(1):    "systemd\n",
+		procCmdlinePath(1): "/usr/lib/systemd/systemd\x00",
+		procCommPath(2):    "obs\n",
+		procCmdlinePath(2): "/usr/bin/obs\x00",
+		procCommPath(3):    "davinci-resolv\n", // truncated comm
+		procCmdlinePath(3): "/opt/resolve/bin/davinci-resolve-studio\x00",
+		procCommPath(4):    "FahCore_27\n",
+		procCmdlinePath(4): "/config/cores/FahCore_27\x00",
+		procCommPath(5):    "kworker/0:1\n", // kernel thread, empty cmdline
+		procCmdlinePath(5): "",
+	}
+	c := collectorWith(&fakeGPU{}, files)
+	scans := 0
+	c.listPIDs = func() ([]uint32, error) { scans++; return []uint32{1, 2, 3, 4, 5, 99}, nil }
+
+	snap, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if scans != 0 || snap.UserPauseMatches != nil {
+		t.Fatalf("lista vacía: scans=%d matches=%v", scans, snap.UserPauseMatches)
+	}
+
+	// The collector also guards against a FAH pattern that bypassed parsing.
+	c.SetPauseProcesses([]string{"obs", "davinci-resolve*", "fahcore*"})
+	snap, err = c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if want := []string{"davinci-resolve-studio", "obs"}; !reflect.DeepEqual(snap.UserPauseMatches, want) {
+		t.Fatalf("UserPauseMatches = %v, se esperaba %v", snap.UserPauseMatches, want)
+	}
+}
+
+// TestLinuxCollectorUserPauseListErrors: an unreadable /proc yields no match
+// and no error.
+func TestLinuxCollectorUserPauseListErrors(t *testing.T) {
+	c := collectorWith(&fakeGPU{}, nil)
+	c.SetPauseProcesses([]string{"obs"})
+	c.listPIDs = func() ([]uint32, error) { return nil, fs.ErrPermission }
+	snap, err := c.Collect(context.Background())
+	if err != nil || snap.UserPauseMatches != nil {
+		t.Fatalf("snap=%v err=%v", snap.UserPauseMatches, err)
+	}
+}
+
+// TestLinuxCollectorComputeCPU: CPU use is measured for compute processes
+// between ticks; the first tick, a reused PID and graphics processes report
+// nothing.
+func TestLinuxCollectorComputeCPU(t *testing.T) {
+	stat := func(pid uint32, start, ticks uint64) string {
+		// Field 14 (utime) carries all the ticks; stime stays 0.
+		return fmt.Sprintf("%d (blender) S 1 0 0 0 0 0 0 0 0 0 %d 0 0 0 0 0 0 0 %d 0 0\n", pid, ticks, start)
+	}
+	files := map[string]string{
+		procCommPath(10):    "blender\n",
+		procCmdlinePath(10): "./blender\x00",
+		procStatPath(10):    stat(10, 500, 1000),
+		procCommPath(11):    "game\n",
+		procCmdlinePath(11): "/usr/bin/game\x00",
+		procStatPath(11):    stat(11, 600, 1000),
+	}
+	prov := &fakeGPU{procs: []gpu.ProcessInfo{
+		{PID: 10, UsedVRAMMiB: 777, SMUtilValid: true, Compute: true},
+		{PID: 11, UsedVRAMMiB: 900, SMUtilValid: true},
+	}}
+	c := collectorWith(prov, files)
+	clock := time.Unix(0, 0)
+	c.now = func() time.Time { return clock }
+
+	snap, _ := c.Collect(context.Background())
+	if snap.ProcessCPUPct != nil {
+		t.Fatalf("primer tick: %v, se esperaba sin datos", snap.ProcessCPUPct)
+	}
+
+	clock = clock.Add(2 * time.Second)
+	files[procStatPath(10)] = stat(10, 500, 1000+2140) // 10.7 cores for 2 s
+	snap, _ = c.Collect(context.Background())
+	if got := snap.ProcessCPUPct[10]; got != 1070 {
+		t.Fatalf("CPU = %d%%, se esperaba 1070%%", got)
+	}
+	if _, ok := snap.ProcessCPUPct[11]; ok {
+		t.Fatal("un proceso solo gráfico no debe tener CPU medida")
+	}
+
+	clock = clock.Add(2 * time.Second)
+	files[procStatPath(10)] = stat(10, 999, 5000) // PID reused
+	snap, _ = c.Collect(context.Background())
+	if _, ok := snap.ProcessCPUPct[10]; ok {
+		t.Fatal("un PID reutilizado no debe heredar la lectura anterior")
+	}
+
+	prov.procs = nil
+	c.Collect(context.Background())
+	if len(c.cpuPrev) != 0 {
+		t.Fatalf("cpuPrev = %v, se esperaba vacío", c.cpuPrev)
+	}
 }
