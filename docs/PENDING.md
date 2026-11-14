@@ -5,8 +5,8 @@ it, then move it to `docs/archive/PENDING_HISTORY.md` when the section is
 done. Finished work and its context (M1 review, chaos passes, daemon loop):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-14 (creative-app policy decided; R3 and R4 fixed in
-`fix/m2-detector-bounds`).
+Last updated: 2026-11-14 (step 1 verified on CachyOS: the unit runs as root;
+results in `DAEMON_PLAN.md` section 6).
 
 ## Road to v0.1.0
 
@@ -14,18 +14,19 @@ Each step is its own branch and PR to `develop`.
 
 ### 1. Verify the systemd unit on CachyOS (needs root)
 
-Unit draft: `deploy/systemd/ecofold-daemon.service`.
+Unit: `deploy/systemd/ecofold-daemon.service`. Verified 2026-11-14; details in
+`DAEMON_PLAN.md` section 6.
 
-- [ ] `SetPowerManagementLimit` works as `User=ecofold` with only
-  `CAP_SYS_ADMIN`; otherwise fall back to `User=root` and keep the bounding
-  set and sandbox.
-- [ ] `ExecStopPost` restores 145 W after `systemctl kill -s KILL`.
-- [ ] `/proc/<pid>/comm` and `cmdline` of user games are readable under
+- [x] `SetPowerManagementLimit` as `User=ecofold` with only `CAP_SYS_ADMIN`:
+  NVML returns `Insufficient Permissions`. The unit now runs as `User=root`
+  and keeps `CapabilityBoundingSet=CAP_SYS_ADMIN` and the sandbox.
+- [x] `ExecStopPost` restores 145 W after `systemctl kill -s KILL`.
+- [x] `/proc/<pid>/comm` and `cmdline` of user processes are readable under
   `ProtectSystem=strict`; `DeviceAllow` paths match `ls /dev/nvidia*`.
-- [ ] `RuntimeDirectoryPreserve=restart` keeps the pause marker across
+- [x] `RuntimeDirectoryPreserve=restart` keeps `/run/ecofold` across
   `Restart=`.
-- [ ] The in-process cooldown after closing a real game (2 min) ends with
-  123 W and FAH folding (only the marker path was verified on hardware).
+- [x] Closing Baldur's Gate 3 ends the 2 min cooldown with 123 W and FAH
+  folding.
 
 ### 2. Close M2 (issue #2): Proton/Wine watcher and app calibration
 
@@ -95,7 +96,13 @@ calibrate the thresholds with this policy in mind.
   socket exists.
 - [ ] Unix domain socket with restrictive permissions (owner/group only) and a
   minimal protocol: status, force pause/resume, read/update config.
-- [ ] Security review of the socket before merging (new attack surface).
+- [ ] Security review of the socket before merging (new attack surface). The
+  daemon runs as root, so a socket bug is a root bug: socket `0660` with an
+  `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts
+  against the NVML constraints.
+- [ ] Harden the unit further (`SystemCallFilter=@system-service`,
+  `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
+  re-check that NVML and cgo still work on CachyOS.
 - [ ] Add Wails to `go.mod`; system tray with state (Folding / Paused by game /
   Battery) and current TDP. The GUI stays unprivileged.
 - [ ] GUI handles the daemon being down (shows "daemon not running", no crash).
@@ -109,7 +116,10 @@ calibrate the thresholds with this policy in mind.
   and `gomodTidy`; `renovate.json` lives on `main`.
 - [ ] AUR `PKGBUILD`: daemon, systemd unit and GUI. Declare the legacy
   autofold setup in `conflicts` and document in the README that
-  `autofold.service` must be disabled.
+  `autofold.service` must be disabled. It is a **user** unit:
+  `systemctl --user disable --now autofold`. With both running, autofold
+  freezes the FAH container (`docker pause`) and EcoFold cannot reach the
+  API.
 - [ ] macOS `.dmg` (telemetry + FAH control only; no TDP on Apple Silicon).
 - [ ] README with install, permissions and known limitations.
 - [ ] Tag `v0.1.0` on `main` once every box above is ticked.
@@ -135,6 +145,12 @@ calibrate the thresholds with this policy in mind.
 - [ ] **R3-1, R3-2** (accepted, see `CHAOS_REPORT_M3.md`): an unwritable
   runtime dir loses pause ownership across restarts; any entry at the marker
   path counts as ownership (root-only).
+
+## After v0.1.0
+
+- [ ] Evaluate a minimal privileged helper (`ecofold-powerctl`, started
+  through polkit/`pkexec`) so the daemon itself can run unprivileged. Today
+  NVML requires uid 0 for power limits.
 
 ## Housekeeping
 
