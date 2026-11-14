@@ -32,9 +32,14 @@ Unit: `deploy/systemd/ecofold-daemon.service`. Verified 2026-11-14; details in
 
 Branch `feat/m2-proton-watcher`.
 
-- [ ] Detection layer 2: `wineserver`, `reaper` and `.exe` payloads as a game
-  signal, reading `/proc` once per tick (no shell commands).
-- [ ] Share the existing cooldown latch with layer 1.
+- [x] Detection layer 2 (`internal/detector/linux_sessions.go`): GPU
+  processes are tied to a game session (ancestor `reaper SteamLaunch`, or a
+  Wine `.exe` outside Steam) through `/proc/<pid>/stat` and `cmdline`, no shell
+  commands. Verified on CachyOS with Deadlock: `deadlock.exe` and Wine's
+  `explorer.exe` map to `steam:1422450`. `wineserver` is not used: it is not
+  an ancestor of the game and outlives it.
+- [x] Share the existing cooldown latch with layer 1: a session holds the load
+  pause it caused while it is live, and never starts one.
 - [x] Filter Electron helpers: `electron`, `discord`, `slack`, `code` and
   `spotify` added to `browserBinaries` in `linux_collector.go`, so
   `isBrowserHelper` drops their `--type=renderer` and `--type=gpu-process`
@@ -137,8 +142,9 @@ calibrate the thresholds with this policy in mind.
   `TestDarwinCollectorBatteryVanishedIsTransient`.
 - [ ] **M2-BLOCK fallback.** Drivers without per-process utilization now
   latch the daemon into `Degraded` (no game detection, default limit). A
-  fallback detector (process-name heuristic from layer 2) would restore game
-  detection on those systems.
+  fallback detector would restore game detection on those systems. Layer 2
+  can help (a session plus `GPUMemThresholdMiB` of VRAM), but it needs the
+  daemon to keep collecting in `Degraded` mode instead of latching.
 - [ ] **M4 Mutex held during blocking NVML calls.** Still a hypothesis. The
   daemon bounds the exit restore and `ExecStopPost` is the backstop; reproduce
   on hardware before changing `internal/gpu`.
