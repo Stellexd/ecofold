@@ -460,9 +460,12 @@ func TestMarkerRestoresOwnershipAfterRestart(t *testing.T) {
 	}
 
 	hold := DefaultConfig().StartupHoldTicks
+	if hold != cooldownTicks {
+		t.Fatalf("StartupHoldTicks = %d, se esperaba el cooldown completo (%d)", hold, cooldownTicks)
+	}
 	h.ticks(hold, snapIdle)
-	if h.log.count("fah.Resume") != 0 {
-		t.Fatalf("Resume antes de terminar la espera de arranque: %v", h.log.all())
+	if h.log.count("fah.Resume") != 0 || h.log.count("gpu.Set(123)") != 0 {
+		t.Fatalf("Resume o Set(123) antes de terminar la espera de arranque: %v", h.log.all())
 	}
 	h.ticks(1, snapIdle)
 	set, resume := h.log.index("gpu.Set(123)"), h.log.index("fah.Resume")
@@ -632,5 +635,31 @@ func TestNewValidatesDeps(t *testing.T) {
 		if _, err := New(cfg, deps); err == nil {
 			t.Fatalf("se esperaba error sin %s", name)
 		}
+	}
+}
+
+// TestRestartDuringGameKeepsDefaultLimit pins the CachyOS finding: a restart
+// while a game holds a pause must not cap the GPU before the load is seen
+// again, and the game keeps the default limit through the new pause.
+func TestRestartDuringGameKeepsDefaultLimit(t *testing.T) {
+	h := newHarness(t, true)
+	if err := (marker{dir: h.dir}).set(); err != nil {
+		t.Fatalf("marker.set: %v", err)
+	}
+	h.fah.set(func(f *fakeFAH) { f.status = fah.Status{Paused: true, State: fah.StatePaused} })
+	h.start(t)
+
+	h.ticks(2*sustainTicks, snapLoad)
+	h.ticks(cooldownTicks-1, snapIdle)
+	if n := h.log.count("gpu.Set(123)"); n != 0 {
+		t.Fatalf("Set(123) = %d con el juego aún en pausa: %v", n, h.log.all())
+	}
+	if h.log.count("fah.Resume") != 0 {
+		t.Fatalf("Resume antes del cooldown: %v", h.log.all())
+	}
+	h.ticks(1, snapIdle)
+	set, resume := h.log.index("gpu.Set(123)"), h.log.index("fah.Resume")
+	if set < 0 || resume < 0 || set > resume {
+		t.Fatalf("se esperaba Set(123) y luego Resume tras el cooldown: %v", h.log.all())
 	}
 }

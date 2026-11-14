@@ -64,10 +64,11 @@ type Config struct {
 	// RuntimeDir holds the pause-ownership marker. Required.
 	RuntimeDir string
 	// StartupHoldTicks delays resuming a pause inherited through the marker
-	// until the evaluator has seen this many snapshots, so a restart while a
-	// game is running does not resume folding before the load is detected
-	// again. It should match detector.Config.SustainedTicksRequired.
-	// Default: 3.
+	// until the evaluator has seen this many snapshots, and keeps the default
+	// power limit meanwhile. A restart loses the evaluator's cooldown, so the
+	// hold replaces it: a game still running (even idle in a menu) is neither
+	// capped nor has folding resumed under it before a full cooldown. It
+	// should match detector.Config.CooldownTicksRequired. Default: 60.
 	StartupHoldTicks int
 
 	// CollectTimeout bounds one Collect call. Default: 1.5 s.
@@ -93,7 +94,7 @@ func DefaultConfig() Config {
 	return Config{
 		Tick:             2 * time.Second,
 		EcoWatts:         123,
-		StartupHoldTicks: 3,
+		StartupHoldTicks: 60,
 		CollectTimeout:   1500 * time.Millisecond,
 		StatusTimeout:    500 * time.Millisecond,
 		ActionTimeout:    1500 * time.Millisecond,
@@ -359,7 +360,12 @@ func (d *Daemon) apply(ctx context.Context, decision detector.OperatingState) {
 		if d.pending == opPause {
 			d.pending = opNone // the pause never landed; there is nothing to resume
 		}
-		if d.applyCap() && d.pausedByUs && !hold {
+		switch {
+		case hold && d.pausedByUs:
+			// The inherited pause may still belong to a running game: keep
+			// the default limit until the hold ends.
+			d.restoreIfCapped()
+		case d.applyCap() && d.pausedByUs:
 			d.pending = opResume
 		}
 	}
