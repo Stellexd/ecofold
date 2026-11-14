@@ -61,7 +61,8 @@ type Config struct {
 	GPUUtilThresholdPct int
 
 	// GPUMemThresholdMiB is the in-use GPU memory threshold (MiB). It only counts
-	// as load if GPUMemRequiresUtilPct is also met. Default: 1500.
+	// as load if GPUMemRequiresUtilPct is also met. Default: 1500. The evaluator
+	// rejects values less than or equal to 0 or greater than 65536 (64 GiB).
 	GPUMemThresholdMiB int
 
 	// GPUMemRequiresUtilPct is the minimum GPU utilization (%) that must accompany
@@ -88,6 +89,11 @@ type Config struct {
 // per second it is one minute of sustained load; larger values would make the
 // pause effectively unreachable.
 const maxSustainedTicksRequired = 60
+
+// maxGPUMemThresholdMiB bounds GPUMemThresholdMiB at 64 GiB. A larger value
+// makes the memory rule unreachable on any consumer GPU and, combined with
+// GPUUtilThresholdPct = 100, disables load pausing entirely (R3).
+const maxGPUMemThresholdMiB = 65536
 
 // Cooldown bounds. The daemon ticks every 2 s, so [60,90] ticks is the
 // documented two-to-three-minute cooldown.
@@ -190,7 +196,8 @@ type Evaluator struct {
 // NewEvaluator creates an evaluator with the given configuration. Invalid or
 // overly conservative values are clamped to defaults: GPUUtilThresholdPct <= 25
 // or > 100 is forced to 45 (a threshold above 100% could never be reached and
-// would disable load pausing); GPUMemThresholdMiB <= 0 is forced to 1500;
+// would disable load pausing); GPUMemThresholdMiB <= 0 or > 65536 is forced to
+// 1500;
 // SustainedTicksRequired <= 0 or > 60 is forced to 3; GPUMemRequiresUtilPct below 25 or
 // greater than GPUUtilThresholdPct is forced to 25 (never below 25);
 // MinBatteryPct < 0 or > 100 is forced to 50; CooldownTicksRequired below 60 is
@@ -203,7 +210,7 @@ func NewEvaluator(cfg Config) *Evaluator {
 	if cfg.GPUUtilThresholdPct <= 25 || cfg.GPUUtilThresholdPct > 100 {
 		cfg.GPUUtilThresholdPct = DefaultConfig().GPUUtilThresholdPct
 	}
-	if cfg.GPUMemThresholdMiB <= 0 {
+	if cfg.GPUMemThresholdMiB <= 0 || cfg.GPUMemThresholdMiB > maxGPUMemThresholdMiB {
 		cfg.GPUMemThresholdMiB = DefaultConfig().GPUMemThresholdMiB
 	}
 	if cfg.SustainedTicksRequired <= 0 || cfg.SustainedTicksRequired > maxSustainedTicksRequired {

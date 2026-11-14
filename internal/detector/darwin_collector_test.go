@@ -131,3 +131,58 @@ func TestDarwinCollectorHonorsCanceledContext(t *testing.T) {
 		t.Fatalf("ioreg se ejecutó %v veces con el contexto cancelado", io.calls)
 	}
 }
+
+// TestDarwinCollectorBatteryVanishedIsTransient pins the R4 fix: once a read
+// found a battery, an empty AppleSmartBattery array is an error, never a
+// desktop Mac on AC. The next good read recovers.
+func TestDarwinCollectorBatteryVanishedIsTransient(t *testing.T) {
+	io := &scriptedIOReg{tb: t, battery: "m4_air_battery_discharging.plist", gpu: "m4_air_gpu_idle.plist"}
+	empty := []byte(`<plist version="1.0"><array/></plist>`)
+	serveEmpty := false
+	c := &DarwinCollector{
+		fetch: func(ctx context.Context, class string) ([]byte, error) {
+			if class == "AppleSmartBattery" && serveEmpty {
+				return empty, nil
+			}
+			return io.fetch(ctx, class)
+		},
+		batteryEvery: 1,
+	}
+
+	snap, err := c.Collect(context.Background())
+	if err != nil || !snap.HasBattery || snap.OnAC {
+		t.Fatalf("primera lectura = %+v, %v; se esperaba batería descargando", snap, err)
+	}
+
+	serveEmpty = true
+	if _, err := c.Collect(context.Background()); !errors.Is(err, ErrBatteryVanished) {
+		t.Fatalf("lectura vacía: err = %v, se esperaba ErrBatteryVanished", err)
+	}
+
+	serveEmpty = false
+	snap, err = c.Collect(context.Background())
+	if err != nil || !snap.HasBattery {
+		t.Fatalf("recuperación = %+v, %v; se esperaba batería", snap, err)
+	}
+}
+
+// TestDarwinCollectorDesktopWithoutBattery checks that a Mac that never
+// reported a battery keeps the documented desktop mapping without errors.
+func TestDarwinCollectorDesktopWithoutBattery(t *testing.T) {
+	io := &scriptedIOReg{tb: t, gpu: "m4_air_gpu_idle.plist"}
+	c := &DarwinCollector{
+		fetch: func(ctx context.Context, class string) ([]byte, error) {
+			if class == "AppleSmartBattery" {
+				return []byte(`<plist version="1.0"><array/></plist>`), nil
+			}
+			return io.fetch(ctx, class)
+		},
+		batteryEvery: 1,
+	}
+	for i := 0; i < 3; i++ {
+		snap, err := c.Collect(context.Background())
+		if err != nil || snap.HasBattery || !snap.OnAC {
+			t.Fatalf("tick %d = %+v, %v; se esperaba Mac de escritorio en AC", i, snap, err)
+		}
+	}
+}

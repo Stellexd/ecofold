@@ -58,10 +58,9 @@ func TestSustainedTicksWithinBoundStillWorks(t *testing.T) {
 	}
 }
 
-// TestHugeMemThresholdStillPausesByUtilization documents that an unbounded
-// GPUMemThresholdMiB only disables the memory heuristic; the primary GPU
-// utilization rule (default 45%) still works. This is not a fail-open as long
-// as GPUUtilThresholdPct is not itself set to 100.
+// TestHugeMemThresholdStillPausesByUtilization checks that a huge
+// GPUMemThresholdMiB (reset to the default by NewEvaluator) never stops the
+// primary GPU utilization rule (default 45%) from pausing.
 func TestHugeMemThresholdStillPausesByUtilization(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.GPUMemThresholdMiB = math.MaxInt
@@ -77,13 +76,11 @@ func TestHugeMemThresholdStillPausesByUtilization(t *testing.T) {
 	}
 }
 
-// TestMaxUtilThresholdPlusHugeMemDisablesPause documents the combination that
-// slips through M5: GPUUtilThresholdPct=100 is considered valid by NewEvaluator
-// and GPUMemThresholdMiB has no upper bound, so 99% utilization with 16 GiB in
-// use never pauses. Both values are "in range"; only the combination is
-// fail-open. Reported to the coder as a residual risk (lower severity than the
-// SustainedTicks one because 100% utilization is reachable on real hardware).
-func TestMaxUtilThresholdPlusHugeMemDisablesPause(t *testing.T) {
+// TestMaxUtilThresholdPlusHugeMemStillPauses pins the R3 fix: with
+// GPUUtilThresholdPct=100 and an unbounded GPUMemThresholdMiB, 99% utilization
+// with 16 GiB in use used to never pause. NewEvaluator now resets any memory
+// threshold above 64 GiB to the default, so the memory rule pauses again.
+func TestMaxUtilThresholdPlusHugeMemStillPauses(t *testing.T) {
 	cfg := Config{
 		AllowBatteryFolding:    true,
 		GPUUtilThresholdPct:    100,
@@ -93,12 +90,32 @@ func TestMaxUtilThresholdPlusHugeMemDisablesPause(t *testing.T) {
 		MinBatteryPct:          50,
 	}
 	ev := NewEvaluator(cfg)
+	if got, want := ev.cfg.GPUMemThresholdMiB, DefaultConfig().GPUMemThresholdMiB; got != want {
+		t.Fatalf("GPUMemThresholdMiB = %d, se esperaba %d", got, want)
+	}
 
 	snap := SystemSnapshot{OnAC: true, GPUDeviceUtilPct: 99, GPUInUseMemMiB: 16 * 1024}
-	for i := 0; i < 10; i++ {
-		if got := ev.Evaluate(snap); got != StateFolding {
-			t.Fatalf("tick %d: estado = %q, se esperaba %q (documentando el fail-open residual)",
-				i+1, got, StateFolding)
+	for i := 0; i < cfg.SustainedTicksRequired-1; i++ {
+		ev.Evaluate(snap)
+	}
+	if got := ev.Evaluate(snap); got != StatePausedLoad {
+		t.Fatalf("estado = %q, se esperaba %q", got, StatePausedLoad)
+	}
+}
+
+// TestMemThresholdUpperBound checks the 64 GiB bound: the limit itself is
+// kept and anything above it falls back to the default.
+func TestMemThresholdUpperBound(t *testing.T) {
+	cases := map[int]int{
+		maxGPUMemThresholdMiB:     maxGPUMemThresholdMiB,
+		maxGPUMemThresholdMiB + 1: DefaultConfig().GPUMemThresholdMiB,
+		math.MaxInt:               DefaultConfig().GPUMemThresholdMiB,
+	}
+	for in, want := range cases {
+		cfg := DefaultConfig()
+		cfg.GPUMemThresholdMiB = in
+		if got := NewEvaluator(cfg).cfg.GPUMemThresholdMiB; got != want {
+			t.Errorf("GPUMemThresholdMiB(%d) = %d, se esperaba %d", in, got, want)
 		}
 	}
 }
