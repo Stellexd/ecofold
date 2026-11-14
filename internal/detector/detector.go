@@ -78,12 +78,13 @@ type Config struct {
 	// ComputeMemThresholdMiB is the GPU memory (MiB) a non-ignored compute
 	// process must hold to count as contending with Folding@home. Contending
 	// processes count as load without meeting GPUUtilThresholdPct, because the
-	// FAH core takes most of the SM time from any other compute work (Blender
-	// Cycles measured 0-20 % SM next to FahCore at 61-98 %). A process also
-	// needs an SM sample above 0 within the last computeActivityTicks ticks,
-	// so an idle app that keeps its CUDA context (Blender at rest: 437 MiB,
-	// 0 %) does not pause folding. Linux only. Default: 256. Values <= 0 or
-	// > 65536 are reset to the default.
+	// FAH core takes the SM time from any other compute work: during a Blender
+	// Cycles (OptiX) render NVML attributed it no SM samples at all while
+	// FahCore held 71-98 %. A process also needs a sign of activity within the
+	// last computeActivityTicks ticks (CPU use of at least half a core, or an
+	// SM sample above 0), so an idle app that keeps its CUDA context (Blender
+	// at rest: 335-437 MiB, 0-1 % CPU) does not pause folding. Linux only.
+	// Default: 256. Values <= 0 or > 65536 are reset to the default.
 	ComputeMemThresholdMiB int
 
 	// CooldownTicksRequired is the number of consecutive load-free measurements
@@ -101,11 +102,14 @@ type Config struct {
 // pause effectively unreachable.
 const maxSustainedTicksRequired = 60
 
-// computeActivityTicks is how many ticks an SM sample above 0 keeps a compute
-// process active. NVML attributes few samples to a process that competes with
-// the FAH core (Blender rendering: 10 %, 0, 0, 20 %, 0, 0, 0, 7 %, 10 %), so a
-// single tick would flicker.
+// computeActivityTicks is how many ticks one sign of activity keeps a compute
+// process active, so sparse signals do not flicker.
 const computeActivityTicks = 5
+
+// computeCPUActivePct is the CPU use (percent of one core) that marks a
+// compute process as working. Blender measured ~1070 % rendering and 0-1 % at
+// rest.
+const computeCPUActivePct = 50
 
 // maxGPUMemThresholdMiB bounds GPUMemThresholdMiB at 64 GiB. A larger value
 // makes the memory rule unreachable on any consumer GPU and, combined with
@@ -214,6 +218,13 @@ type SystemSnapshot struct {
 	// load regardless of GPU use: the user asked for no folding while those
 	// apps run.
 	UserPauseMatches []string
+
+	// ProcessCPUPct maps the PID of a compute process in GPUProcesses to its
+	// CPU use since the previous tick, in percent of one core (Linux only).
+	// It is the activity signal for compute contention: NVML attributes no
+	// SM samples to compute work that the FAH core starves, but a rendering
+	// app keeps its CPU busy (Blender Cycles: ~1070 %; at rest: 0-1 %).
+	ProcessCPUPct map[uint32]int
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
@@ -382,7 +393,7 @@ func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string) {
 			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct ||
 				(proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
 					proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct) ||
-				e.computeContending(proc, seen) {
+				e.computeContending(proc, s.ProcessCPUPct[proc.PID], seen) {
 				high = true
 				if key, ok := s.GPUProcessSessions[proc.PID]; ok {
 					sessions = append(sessions, key)
@@ -405,16 +416,16 @@ func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string) {
 }
 
 // computeContending reports whether proc is compute work held back by the FAH
-// core: a compute process with at least ComputeMemThresholdMiB that had an SM
-// sample above 0 within the last computeActivityTicks ticks. seen collects
-// the compute PIDs of this tick so stale entries can be dropped. It must be
-// called with e.mu held.
-func (e *Evaluator) computeContending(proc gpu.ProcessInfo, seen map[uint32]bool) bool {
+// core: a compute process with at least ComputeMemThresholdMiB that showed
+// activity (cpuPct >= computeCPUActivePct or an SM sample above 0) within the
+// last computeActivityTicks ticks. seen collects the compute PIDs of this
+// tick so stale entries can be dropped. It must be called with e.mu held.
+func (e *Evaluator) computeContending(proc gpu.ProcessInfo, cpuPct int, seen map[uint32]bool) bool {
 	if !proc.Compute {
 		return false
 	}
 	seen[proc.PID] = true
-	if proc.SMUtilPct > 0 {
+	if proc.SMUtilPct > 0 || cpuPct >= computeCPUActivePct {
 		if e.computeSeen == nil {
 			e.computeSeen = make(map[uint32]uint64)
 		}

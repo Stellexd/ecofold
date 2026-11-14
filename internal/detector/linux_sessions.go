@@ -39,9 +39,10 @@ var errMalformedStat = errors.New("detector: malformed /proc stat")
 
 // procStat holds the /proc/<pid>/stat fields layer 2 needs.
 type procStat struct {
-	ppid   uint32
-	start  uint64 // starttime, field 22, in clock ticks since boot
-	zombie bool
+	ppid     uint32
+	start    uint64 // starttime, field 22, in clock ticks since boot
+	cpuTicks uint64 // utime + stime, fields 14 and 15, in clock ticks
+	zombie   bool
 }
 
 // sessionAnchor identifies the process a session is tied to.
@@ -58,7 +59,8 @@ func parseProcStat(raw []byte) (procStat, error) {
 	if i < 0 {
 		return procStat{}, errMalformedStat
 	}
-	// After comm: state (field 3), ppid (4), ..., starttime (22).
+	// After comm: state (field 3), ppid (4), ..., utime (14), stime (15),
+	// ..., starttime (22).
 	f := strings.Fields(s[i+1:])
 	if len(f) < 20 {
 		return procStat{}, errMalformedStat
@@ -71,7 +73,20 @@ func parseProcStat(raw []byte) (procStat, error) {
 	if err != nil {
 		return procStat{}, errMalformedStat
 	}
-	return procStat{ppid: uint32(ppid), start: start, zombie: f[0] == "Z" || f[0] == "X"}, nil
+	utime, err := strconv.ParseUint(f[11], 10, 64)
+	if err != nil {
+		return procStat{}, errMalformedStat
+	}
+	stime, err := strconv.ParseUint(f[12], 10, 64)
+	if err != nil {
+		return procStat{}, errMalformedStat
+	}
+	return procStat{
+		ppid:     uint32(ppid),
+		start:    start,
+		cpuTicks: utime + stime,
+		zombie:   f[0] == "Z" || f[0] == "X",
+	}, nil
 }
 
 // gameSessions resolves the session of each GPU process and reports which

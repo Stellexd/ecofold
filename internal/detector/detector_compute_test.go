@@ -37,12 +37,42 @@ func TestComputeContentionPausesBlenderRender(t *testing.T) {
 	}
 }
 
-// TestIdleBlenderKeepsFolding: Blender at rest keeps a 437 MiB CUDA context
-// with 0 % SM; it must not pause folding.
+// TestComputeContentionByCPU: the second CachyOS render (OptiX, 400 %, no
+// noise threshold) got no SM samples at all, but Blender used ~1070 % CPU.
+func TestComputeContentionByCPU(t *testing.T) {
+	ev := NewEvaluator(DefaultConfig())
+	render := computeSnap(339813, 0, 777, true)
+	render.ProcessCPUPct = map[uint32]int{339813: 1070}
+	var got OperatingState
+	for i := 0; i < DefaultConfig().SustainedTicksRequired; i++ {
+		got = ev.Evaluate(render)
+	}
+	if got != StatePausedLoad {
+		t.Fatalf("render sin muestras de SM = %q, se esperaba %q", got, StatePausedLoad)
+	}
+}
+
+// TestIdleBlenderKeepsFolding: Blender at rest keeps a 335-437 MiB CUDA
+// context with 0 % SM and 0-1 % CPU; it must not pause folding.
 func TestIdleBlenderKeepsFolding(t *testing.T) {
 	ev := NewEvaluator(DefaultConfig())
 	for i := 0; i < 200; i++ {
-		if got := ev.Evaluate(computeSnap(330989, 0, 437, true)); got != StateFolding {
+		idle := computeSnap(330989, 0, 437, true)
+		idle.ProcessCPUPct = map[uint32]int{330989: i % 2}
+		if got := ev.Evaluate(idle); got != StateFolding {
+			t.Fatalf("tick %d = %q, se esperaba %q", i, got, StateFolding)
+		}
+	}
+}
+
+// TestBusyCPUWithoutComputeContext: CPU use alone never counts; the rule is
+// only for processes that hold a compute context.
+func TestBusyCPUWithoutComputeContext(t *testing.T) {
+	ev := NewEvaluator(DefaultConfig())
+	snap := computeSnap(5, 0, 2048, false)
+	snap.ProcessCPUPct = map[uint32]int{5: 800}
+	for i := 0; i < 20; i++ {
+		if got := ev.Evaluate(snap); got != StateFolding {
 			t.Fatalf("tick %d = %q, se esperaba %q", i, got, StateFolding)
 		}
 	}

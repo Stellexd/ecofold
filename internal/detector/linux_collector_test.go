@@ -5,9 +5,11 @@ package detector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
 )
@@ -401,5 +403,58 @@ func TestLinuxCollectorUserPauseListErrors(t *testing.T) {
 	snap, err := c.Collect(context.Background())
 	if err != nil || snap.UserPauseMatches != nil {
 		t.Fatalf("snap=%v err=%v", snap.UserPauseMatches, err)
+	}
+}
+
+// TestLinuxCollectorComputeCPU: CPU use is measured for compute processes
+// between ticks; the first tick, a reused PID and graphics processes report
+// nothing.
+func TestLinuxCollectorComputeCPU(t *testing.T) {
+	stat := func(pid uint32, start, ticks uint64) string {
+		// Field 14 (utime) carries all the ticks; stime stays 0.
+		return fmt.Sprintf("%d (blender) S 1 0 0 0 0 0 0 0 0 0 %d 0 0 0 0 0 0 0 %d 0 0\n", pid, ticks, start)
+	}
+	files := map[string]string{
+		procCommPath(10):    "blender\n",
+		procCmdlinePath(10): "./blender\x00",
+		procStatPath(10):    stat(10, 500, 1000),
+		procCommPath(11):    "game\n",
+		procCmdlinePath(11): "/usr/bin/game\x00",
+		procStatPath(11):    stat(11, 600, 1000),
+	}
+	prov := &fakeGPU{procs: []gpu.ProcessInfo{
+		{PID: 10, UsedVRAMMiB: 777, SMUtilValid: true, Compute: true},
+		{PID: 11, UsedVRAMMiB: 900, SMUtilValid: true},
+	}}
+	c := collectorWith(prov, files)
+	clock := time.Unix(0, 0)
+	c.now = func() time.Time { return clock }
+
+	snap, _ := c.Collect(context.Background())
+	if snap.ProcessCPUPct != nil {
+		t.Fatalf("primer tick: %v, se esperaba sin datos", snap.ProcessCPUPct)
+	}
+
+	clock = clock.Add(2 * time.Second)
+	files[procStatPath(10)] = stat(10, 500, 1000+2140) // 10.7 cores for 2 s
+	snap, _ = c.Collect(context.Background())
+	if got := snap.ProcessCPUPct[10]; got != 1070 {
+		t.Fatalf("CPU = %d%%, se esperaba 1070%%", got)
+	}
+	if _, ok := snap.ProcessCPUPct[11]; ok {
+		t.Fatal("un proceso solo gráfico no debe tener CPU medida")
+	}
+
+	clock = clock.Add(2 * time.Second)
+	files[procStatPath(10)] = stat(10, 999, 5000) // PID reused
+	snap, _ = c.Collect(context.Background())
+	if _, ok := snap.ProcessCPUPct[10]; ok {
+		t.Fatal("un PID reutilizado no debe heredar la lectura anterior")
+	}
+
+	prov.procs = nil
+	c.Collect(context.Background())
+	if len(c.cpuPrev) != 0 {
+		t.Fatalf("cpuPrev = %v, se esperaba vacío", c.cpuPrev)
 	}
 }

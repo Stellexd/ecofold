@@ -100,14 +100,17 @@ is returned.
 
 The provider lists graphics **and** compute processes. CUDA work competes with
 the FAH core for SM time and loses: on CachyOS, Blender Cycles (OptiX) rendered
-at 0-20 % SM and 1424 MiB while FahCore held 61-98 %, so neither the 45 % rule
-nor the 1500 MiB rule could ever fire. A compute process (`ProcessInfo.Compute`)
+at 0-20 % SM and 1424 MiB while FahCore held 61-98 %, and a longer render got
+no SM samples at all (`nvidia-smi pmon` showed `-` too). Neither the 45 % rule
+nor the 1500 MiB rule can fire. A compute process (`ProcessInfo.Compute`)
 therefore also counts as load when it holds at least `ComputeMemThresholdMiB`
-(256 MiB) **and** had an SM sample above 0 within the last 5 ticks. The window
-absorbs NVML's sparse samples (10, 0, 0, 20, 0, 0, 0, 7, 10 %); the activity
-requirement keeps an idle app that keeps its CUDA context (Blender at rest:
-437 MiB, 0 %) from pausing folding. Once folding pauses, the app gets the GPU
-and its SM rises above the normal threshold. The FAH core is compute too and is
+(256 MiB) **and** showed activity within the last 5 ticks: CPU use of at least
+50 % of one core (`ProcessCPUPct`, from `utime + stime` in `/proc/<pid>/stat`)
+or an SM sample above 0. Blender used ~1070 % CPU rendering and 0-1 % at rest
+(335-437 MiB), so an idle app that keeps its CUDA context does not pause
+folding. Verified with the sampler on CachyOS: idle Blender kept folding for a
+minute, and F12 paused it within 4 s, on the CPU signal before any SM sample.
+Once folding pauses, the app gets the GPU. The FAH core is compute too and is
 removed by the ignore list.
 
 ### User pause list (Linux)

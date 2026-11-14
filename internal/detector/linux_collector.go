@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
 )
@@ -88,6 +89,10 @@ type LinuxCollector struct {
 	pause []string
 	// listPIDs is the /proc listing seam. Production reads /proc.
 	listPIDs func() ([]uint32, error)
+	// cpuPrev holds the last CPU reading of each compute process; now is the
+	// clock seam for CPU rates.
+	cpuPrev map[uint32]cpuSample
+	now     func() time.Time
 }
 
 // SetPauseProcesses sets the user's pause list. Patterns must come from
@@ -150,6 +155,7 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 
 	kept := make([]gpu.ProcessInfo, 0, len(procs))
 	argvs := make(map[uint32][]string, len(procs))
+	var computePIDs []uint32
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
 			return SystemSnapshot{}, err
@@ -160,7 +166,11 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 		}
 		kept = append(kept, proc)
 		argvs[proc.PID] = c.argv(proc.PID)
+		if proc.Compute {
+			computePIDs = append(computePIDs, proc.PID)
+		}
 	}
+	cpu := c.computeCPU(computePIDs)
 	bySession, live := c.gameSessions(argvs)
 	matches := c.userPauseMatches(ctx)
 
@@ -172,6 +182,7 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 		GPUProcessSessions: bySession,
 		LiveGameSessions:   live,
 		UserPauseMatches:   matches,
+		ProcessCPUPct:      cpu,
 	}, nil
 }
 
