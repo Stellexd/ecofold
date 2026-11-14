@@ -61,7 +61,8 @@ type Config struct {
 	GPUUtilThresholdPct int
 
 	// GPUMemThresholdMiB is the in-use GPU memory threshold (MiB). It only counts
-	// as load if GPUMemRequiresUtilPct is also met. Default: 1500.
+	// as load if GPUMemRequiresUtilPct is also met. Default: 1500. The evaluator
+	// rejects values less than or equal to 0 or greater than 65536 (64 GiB).
 	GPUMemThresholdMiB int
 
 	// GPUMemRequiresUtilPct is the minimum GPU utilization (%) that must accompany
@@ -73,6 +74,18 @@ type Config struct {
 	// required to declare StatePausedLoad. Default: 3. The evaluator rejects
 	// values less than or equal to 0 or greater than 60.
 	SustainedTicksRequired int
+
+	// ComputeMemThresholdMiB is the GPU memory (MiB) a non-ignored compute
+	// process must hold to count as contending with Folding@home. Contending
+	// processes count as load without meeting GPUUtilThresholdPct, because the
+	// FAH core takes the SM time from any other compute work: during a Blender
+	// Cycles (OptiX) render NVML attributed it no SM samples at all while
+	// FahCore held 71-98 %. A process also needs a sign of activity within the
+	// last computeActivityTicks ticks (CPU use of at least half a core, or an
+	// SM sample above 0), so an idle app that keeps its CUDA context (Blender
+	// at rest: 335-437 MiB, 0-1 % CPU) does not pause folding. Linux only.
+	// Default: 256. Values <= 0 or > 65536 are reset to the default.
+	ComputeMemThresholdMiB int
 
 	// CooldownTicksRequired is the number of consecutive load-free measurements
 	// required before folding resumes after StatePausedLoad. It is the hysteresis
@@ -88,6 +101,20 @@ type Config struct {
 // per second it is one minute of sustained load; larger values would make the
 // pause effectively unreachable.
 const maxSustainedTicksRequired = 60
+
+// computeActivityTicks is how many ticks one sign of activity keeps a compute
+// process active, so sparse signals do not flicker.
+const computeActivityTicks = 5
+
+// computeCPUActivePct is the CPU use (percent of one core) that marks a
+// compute process as working. Blender measured ~1070 % rendering and 0-1 % at
+// rest.
+const computeCPUActivePct = 50
+
+// maxGPUMemThresholdMiB bounds GPUMemThresholdMiB at 64 GiB. A larger value
+// makes the memory rule unreachable on any consumer GPU and, combined with
+// GPUUtilThresholdPct = 100, disables load pausing entirely (R3).
+const maxGPUMemThresholdMiB = 65536
 
 // Cooldown bounds. The daemon ticks every 2 s, so [60,90] ticks is the
 // documented two-to-three-minute cooldown.
@@ -105,6 +132,7 @@ func DefaultConfig() Config {
 		GPUMemThresholdMiB:     1500,
 		GPUMemRequiresUtilPct:  25,
 		SustainedTicksRequired: 3,
+		ComputeMemThresholdMiB: 256,
 		CooldownTicksRequired:  60,
 	}
 }
@@ -173,6 +201,30 @@ type SystemSnapshot struct {
 	// zero: the Folding@home core keeps the device busy, so those aggregates are
 	// contaminated and would pause folding permanently.
 	GPUProcesses []gpu.ProcessInfo
+
+	// GPUProcessSessions maps the PID of a GPUProcesses entry to the game
+	// session it belongs to (detection layer 2, Linux only): a Steam launch or
+	// a Wine/Proton .exe. Processes outside a game session have no entry. It
+	// is nil when no GPU process belongs to a session and on macOS.
+	GPUProcessSessions map[uint32]string
+
+	// LiveGameSessions lists the game sessions seen by the collector that are
+	// still running this tick. A load pause caused by a process of one of
+	// these sessions is held until the session ends.
+	LiveGameSessions []string
+
+	// UserPauseMatches lists the running processes that match the user's
+	// pause list (Linux only). While it is not empty, every tick counts as
+	// load regardless of GPU use: the user asked for no folding while those
+	// apps run.
+	UserPauseMatches []string
+
+	// ProcessCPUPct maps the PID of a compute process in GPUProcesses to its
+	// CPU use since the previous tick, in percent of one core (Linux only).
+	// It is the activity signal for compute contention: NVML attributes no
+	// SM samples to compute work that the FAH core starves, but a rendering
+	// app keeps its CPU busy (Blender Cycles: ~1070 %; at rest: 0-1 %).
+	ProcessCPUPct map[uint32]int
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
@@ -184,13 +236,25 @@ type Evaluator struct {
 	highLoadStreak int
 	lowLoadStreak  int
 	loadPaused     bool
-	cfg            Config
+	// heldSessions are the game sessions whose processes caused the current
+	// load streak or pause. While one of them is live, the cooldown waits.
+	heldSessions map[string]struct{}
+	// tick counts Evaluate calls; computeSeen records, per PID, the last tick
+	// with an SM sample above 0 from a compute process.
+	tick        uint64
+	computeSeen map[uint32]uint64
+	cfg         Config
 }
+
+// maxHeldSessions bounds heldSessions. Only sessions with a process above the
+// thresholds are added, so a handful is the realistic maximum.
+const maxHeldSessions = 32
 
 // NewEvaluator creates an evaluator with the given configuration. Invalid or
 // overly conservative values are clamped to defaults: GPUUtilThresholdPct <= 25
 // or > 100 is forced to 45 (a threshold above 100% could never be reached and
-// would disable load pausing); GPUMemThresholdMiB <= 0 is forced to 1500;
+// would disable load pausing); GPUMemThresholdMiB <= 0 or > 65536 is forced to
+// 1500;
 // SustainedTicksRequired <= 0 or > 60 is forced to 3; GPUMemRequiresUtilPct below 25 or
 // greater than GPUUtilThresholdPct is forced to 25 (never below 25);
 // MinBatteryPct < 0 or > 100 is forced to 50; CooldownTicksRequired below 60 is
@@ -203,8 +267,11 @@ func NewEvaluator(cfg Config) *Evaluator {
 	if cfg.GPUUtilThresholdPct <= 25 || cfg.GPUUtilThresholdPct > 100 {
 		cfg.GPUUtilThresholdPct = DefaultConfig().GPUUtilThresholdPct
 	}
-	if cfg.GPUMemThresholdMiB <= 0 {
+	if cfg.GPUMemThresholdMiB <= 0 || cfg.GPUMemThresholdMiB > maxGPUMemThresholdMiB {
 		cfg.GPUMemThresholdMiB = DefaultConfig().GPUMemThresholdMiB
+	}
+	if cfg.ComputeMemThresholdMiB <= 0 || cfg.ComputeMemThresholdMiB > maxGPUMemThresholdMiB {
+		cfg.ComputeMemThresholdMiB = DefaultConfig().ComputeMemThresholdMiB
 	}
 	if cfg.SustainedTicksRequired <= 0 || cfg.SustainedTicksRequired > maxSustainedTicksRequired {
 		cfg.SustainedTicksRequired = DefaultConfig().SustainedTicksRequired
@@ -240,7 +307,11 @@ func NewEvaluator(cfg Config) *Evaluator {
 //
 // After a load pause, the evaluator latches the decision and keeps returning
 // StatePausedLoad until CooldownTicksRequired consecutive load-free ticks have
-// elapsed. Any load tick during the cooldown restarts it. The cooldown does not
+// elapsed. Any load tick during the cooldown restarts it. If a process that
+// counted as load belongs to a game session (GPUProcessSessions), the cooldown
+// does not start while that session is in LiveGameSessions: a game in a menu
+// or loading screen keeps folding paused, and the cooldown starts when the
+// game exits. Sessions never start a pause on their own. The cooldown does not
 // delay StatePausedBattery or its recovery. If the battery itself demands a
 // pause while the load latch is active, StatePausedBattery is returned instead
 // (it has no cooldown and reflects the independent, higher-priority reason).
@@ -251,7 +322,7 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	defer e.mu.Unlock()
 
 	batteryPause := s.HasBattery && !s.OnAC && (!e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct)
-	isHighLoad := e.isHighLoad(s)
+	isHighLoad, sessions := e.isHighLoad(s)
 
 	switch {
 	case isHighLoad:
@@ -262,8 +333,13 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 		if e.highLoadStreak >= e.cfg.SustainedTicksRequired {
 			e.loadPaused = true
 		}
+		e.holdSessions(sessions)
 	case e.loadPaused:
 		e.highLoadStreak = 0
+		if e.sessionHeld(s.LiveGameSessions) {
+			e.lowLoadStreak = 0
+			break
+		}
 		if e.lowLoadStreak < e.cfg.CooldownTicksRequired {
 			e.lowLoadStreak++
 		}
@@ -274,6 +350,7 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	default:
 		e.highLoadStreak = 0
 		e.lowLoadStreak = 0
+		e.heldSessions = nil
 	}
 
 	if e.loadPaused {
@@ -296,29 +373,97 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	return StateFolding
 }
 
-// isHighLoad reports whether the snapshot shows sustained-capable game load.
+// isHighLoad reports whether the snapshot shows sustained-capable game load and
+// returns the game sessions of the processes that counted as load.
 // When GPUProcesses is non-nil the global device fields are ignored: the
 // collector is responsible for per-process attribution and device-wide metrics
 // are contaminated by Folding@home. When GPUProcesses is nil the macOS/global
 // path is used. It must be called with e.mu held.
-func (e *Evaluator) isHighLoad(s SystemSnapshot) bool {
+func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string) {
 	cfg := e.cfg
+	e.tick++
+	high := len(s.UserPauseMatches) > 0
 	if s.GPUProcesses != nil {
+		var sessions []string
+		seen := make(map[uint32]bool, len(s.GPUProcesses))
 		for _, proc := range s.GPUProcesses {
 			if !proc.SMUtilValid {
 				continue
 			}
-			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct {
-				return true
-			}
-			if proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
-				proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct {
-				return true
+			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct ||
+				(proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
+					proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct) ||
+				e.computeContending(proc, s.ProcessCPUPct[proc.PID], seen) {
+				high = true
+				if key, ok := s.GPUProcessSessions[proc.PID]; ok {
+					sessions = append(sessions, key)
+				}
 			}
 		}
-		return false
+		for pid := range e.computeSeen {
+			if !seen[pid] {
+				delete(e.computeSeen, pid)
+			}
+		}
+		return high, sessions
+	}
+	if high {
+		return true, nil
 	}
 	return s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
 		(s.GPUInUseMemMiB >= cfg.GPUMemThresholdMiB &&
-			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct)
+			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct), nil
+}
+
+// computeContending reports whether proc is compute work held back by the FAH
+// core: a compute process with at least ComputeMemThresholdMiB that showed
+// activity (cpuPct >= computeCPUActivePct or an SM sample above 0) within the
+// last computeActivityTicks ticks. seen collects the compute PIDs of this
+// tick so stale entries can be dropped. It must be called with e.mu held.
+func (e *Evaluator) computeContending(proc gpu.ProcessInfo, cpuPct int, seen map[uint32]bool) bool {
+	if !proc.Compute {
+		return false
+	}
+	seen[proc.PID] = true
+	if proc.SMUtilPct > 0 || cpuPct >= computeCPUActivePct {
+		if e.computeSeen == nil {
+			e.computeSeen = make(map[uint32]uint64)
+		}
+		e.computeSeen[proc.PID] = e.tick
+	}
+	last, ok := e.computeSeen[proc.PID]
+	return ok && e.tick-last < computeActivityTicks &&
+		proc.UsedVRAMMiB >= uint64(e.cfg.ComputeMemThresholdMiB)
+}
+
+// holdSessions records the sessions of the processes that counted as load. It
+// must be called with e.mu held.
+func (e *Evaluator) holdSessions(sessions []string) {
+	for _, key := range sessions {
+		if e.heldSessions == nil {
+			e.heldSessions = make(map[string]struct{})
+		}
+		if len(e.heldSessions) >= maxHeldSessions {
+			return
+		}
+		e.heldSessions[key] = struct{}{}
+	}
+}
+
+// sessionHeld drops held sessions that are no longer live and reports whether
+// any remains. It must be called with e.mu held.
+func (e *Evaluator) sessionHeld(live []string) bool {
+	if len(e.heldSessions) == 0 {
+		return false
+	}
+	alive := make(map[string]struct{}, len(live))
+	for _, key := range live {
+		alive[key] = struct{}{}
+	}
+	for key := range e.heldSessions {
+		if _, ok := alive[key]; !ok {
+			delete(e.heldSessions, key)
+		}
+	}
+	return len(e.heldSessions) > 0
 }

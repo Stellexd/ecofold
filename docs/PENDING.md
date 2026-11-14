@@ -1,70 +1,92 @@
 # Pending Work
 
-This file records the open items found in the review of the
-`feat/m1-gpu-provider` branch before it was integrated into `develop`. Each item
-was verified as still unresolved at commit `9715fc0`. They must be fixed or
-explicitly decided before the `v0.0.1` tag is created on `main`.
+Open work only, ordered by priority. Tick each box in the PR that completes
+it, then move it to `docs/archive/PENDING_HISTORY.md` when the section is
+done. Finished work and its context (M1 review, chaos passes, daemon loop,
+systemd verification, layer 2, compute contention):
+`docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Date: 2026-11-09
+Last updated: 2026-11-14 (end of session: steps 1-2 archived).
 
-## Road to v0.1.0 (master checklist)
+## Next session
 
-Added 2026-11-12. This is the ordered plan from the current state (M1 closed,
-M2 layer 1 merged) to the `v0.1.0` public release. Tick each box in the PR that
-completes it. Items that reference an ID (CH-10, R3, …) are detailed further
-down in this file; tick both places.
+1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
+   while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
+   with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
+   idle, Wallpaper Engine, PCSX2, and Crimson Desert, Path of Exile 2, The
+   Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
+   SIGNALIS in the menu shows the layer 2 session hold on hardware.
+2. Close issue #2 and tag `v0.0.2` after the matrix run.
+3. Start M3: upgrade `go.mod` and the Mac to Go 1.27.4 (CachyOS is already on
+   it), then the socket.
 
-### 1. Daemon main loop (`cmd/ecofold-daemon`), branch `feat/m3-daemon-loop`
+## Road to v0.1.0
 
-Design and decisions: `docs/DAEMON_PLAN.md`. Implemented in
-`internal/daemon` and `cmd/ecofold-daemon`; the macOS items were verified with
-`go test -race ./...` on 2026-11-13. Linux items still need a CachyOS run.
+Each step is its own branch and PR to `develop`. Steps 1 (systemd unit) and
+most of 2 (M2) are done; see the history file.
 
-- [x] 2 s tick loop: `Collect` → `Evaluator.Evaluate` → apply the power limit
-  and `fah.Controller` Pause/Resume (`LinuxCollector` on Linux,
-  `DarwinCollector` on macOS).
-- [x] Keep the previous decision when `Collect` returns an error (never feed
-  "no load" to the evaluator).
-- [x] Fail-safe: `signal.NotifyContext(ctx, SIGINT, SIGTERM)` and
-  `RestoreDefaultPowerLimit()` on every exit path, including panics in the
-  control loop. Restore is bounded (M4) and backed by `ExecStopPost`.
-- [x] **CH2-H1:** send `Pause` on game load even when FAH reports itself idle.
-- [x] **CH-10:** only `Resume` a pause the daemon made itself, never a manual
-  one. Ownership survives restarts through `/run/ecofold/paused-by-daemon`.
-- [x] **M2-BLOCK:** `detector.ErrPerProcessUtilUnsupported` latches the daemon
-  into `Degraded` (default power limit, FAH left as is) with one clear warning.
-- [ ] systemd unit with only `CAP_SYS_ADMIN` (no full root), restart policy and
-  `ExecStopPost` that restores the default power limit. Draft in
-  `deploy/systemd/ecofold-daemon.service`; verify on CachyOS.
-- [x] Pause half of the end-to-end check with *Baldur's Gate 3* on CachyOS
-  (2026-11-13): `bg3` at 55-59 % SM was detected after the 3-tick sustain;
-  default limit restored 9 ms after the decision and FAH pause confirmed
-  1.24 s after it.
-- [x] Linux compile and `go test -race ./...` with `CGO_ENABLED=1` on CachyOS
-  (2026-11-13). An unprivileged run against the real RTX 5060 and FAH
-  container started, collected real per-process data (no M2-BLOCK), detected
-  `NVML_ERROR_NO_PERMISSION` and fell back to pause-only without touching FAH.
-- [x] End-to-end check on CachyOS: open a game → once the evaluator decides
-  to pause (about 6 s of sustained load), TDP back to 145 W and FAH paused
-  within 2 s of that decision; resume → 123 W and folding again. Resume half
-  verified on 2026-11-13 through the marker path: a restarted daemon read
-  `paused-by-daemon`, applied 123 W at once, held `Resume` for the 3 startup
-  ticks and resumed project 18264 6.8 s after start; Ctrl+C restored 145 W
-  and left FAH folding. The in-process 2-minute cooldown after closing a game
-  is covered by unit tests only.
+### 2. Close M2 (issue #2): app calibration
 
-### 2. Close M2 (issue #2): Proton/Wine watcher, branch `feat/m2-proton-watcher`
+- [ ] Check that mpv/VLC with CUDA decoding (`hwdec=nvdec`) does not count as
+  compute contention.
+- [ ] Run the app compatibility matrix below and calibrate the thresholds
+  (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`. A 40-minute
+  run on 2026-11-14 covered only LibreWolf (max 22 % SM, 293 MiB) and
+  Spectacle (17 %), with no false pause in 1200 ticks.
 
-- [ ] Detection layer 2: `wineserver`, `reaper` and `.exe` payloads as a game
-  signal, reading `/proc` once per tick (no shell commands).
-- [ ] Share the existing cooldown latch with layer 1.
-- [ ] Calibrate the thresholds (45 % / 25 % / 1500 MiB) with real games through
-  the daemon and update `internal/detector/README.md`.
-- [ ] **R3** and **R4** decided or fixed.
-- [ ] Filter Electron helpers: add `discord` (and other Electron binaries) to
-  `browserBinaries` in `linux_collector.go`, so `isBrowserHelper` drops their
-  `--type=renderer` and `--type=gpu-process` processes. Found on CachyOS:
-  Discord's renderer is listed by NVML as a graphics process.
+#### App compatibility matrix
+
+Goal: every app falls into the right class, with measured numbers behind the
+ignore list and the thresholds.
+
+| Class | Expected daemon behavior |
+| --- | --- |
+| **Ignore**: launchers, chat, browsers, Electron/CEF helpers | Never pause, even with VRAM held |
+| **Load**: games | Pause after the 3-tick sustain, resume after cooldown |
+| **Load**: creative/GPU-compute apps under sustained load | Same as games; folding continues while they sit idle below the thresholds |
+
+| App | Class | Where to test | Notes |
+| --- | --- | --- | --- |
+| Discord (Electron) | Ignore | CachyOS | Renderer seen in NVML; filter added, verify on hardware |
+| Steam client / steamwebhelper | Ignore | CachyOS | Already ignored |
+| Riot Client / League of Legends launcher | Ignore (launcher) / Load (game) | Windows only | Riot Vanguard blocks Linux, so EcoFold never sees LoL on Linux; measure only |
+| Epic Games Launcher, Battle.net, EA app (via Proton/Lutris/Heroic) | Ignore | CachyOS | CEF launchers; check process names under Wine |
+| Adobe Photoshop | Load | macOS (native, `DarwinCollector`); Windows to measure | No native Linux build |
+| Adobe Premiere Pro (export, playback) | Load | macOS (native); Windows to measure | No native Linux build |
+| Blender (render) | Load | CachyOS (flatpak) | Verified 2026-11-14 through compute contention (OptiX render paused within 6 s) |
+| DaVinci Resolve | Load | CachyOS (native) | Not installed |
+| OBS (NVENC recording) | Load | CachyOS | Uses the encoder more than SM; check `enc` vs `sm` |
+| Baldur's Gate 3 | Load | CachyOS | Verified 2026-11-13: 55-59 % SM, paused |
+| Crimson Desert, Deadlock | Load | CachyOS | Pending |
+| Video playback in a browser | Ignore | CachyOS, macOS | Hardware decode must not pause |
+
+How to measure:
+
+- **CachyOS:** run the calibration sampler used on 2026-11-14 (a test-only
+  `TestCalibrate` kept outside the repo in `~/.cache/ecofold-verify` on
+  CachyOS; it logs every GPU process, its SM, VRAM, ignore/session flags and
+  the evaluator's decision every 2 s to `~/ecofold-calibration.csv`), or the
+  daemon with `-debug` next to `nvidia-smi pmon -s um -c 30`.
+- **macOS:** run the daemon with `-debug`.
+- **Windows dual boot (EcoFold does not run on Windows):** only collect data
+  with `nvidia-smi pmon -s um -c 60` (idle, menu, active use) for apps that
+  have no Linux version. Use it to set thresholds and process names; it does
+  not test the daemon. A Windows port is out of scope for `v0.1.0`.
+
+Decision (2026-11-14): heavy creative and productivity apps (Blender,
+Premiere, Resolve, Photoshop) **pause folding** when they put sustained load
+on the GPU (rendering, exporting, 3D/compute acceleration) above the
+evaluator thresholds, exactly like a game. While they are open but idle below
+the utilization threshold, folding continues. No games-only list: the
+evaluator stays app-agnostic and the user's foreground work wins. On Linux,
+Chromium/Electron/CEF helpers that are not real load (Discord, Slack, VS Code,
+Spotify) are filtered through `browserBinaries` / `DefaultIgnoredProcesses`;
+calibrate the thresholds with this policy in mind.
+
+Follow-up (2026-11-14): thresholds alone cannot catch CUDA work, because the
+FAH core starves it. Two design rules cover it instead of per-app tuning:
+compute contention (above) and an explicit user pause list for apps that must
+always stop folding.
 
 ### 3. M3 (issue #3): IPC and GUI
 
@@ -72,6 +94,13 @@ Design and decisions: `docs/DAEMON_PLAN.md`. Implemented in
   socket exists.
 - [ ] Unix domain socket with restrictive permissions (owner/group only) and a
   minimal protocol: status, force pause/resume, read/update config.
+- [ ] Security review of the socket before merging (new attack surface). The
+  daemon runs as root, so a socket bug is a root bug: socket `0660` with an
+  `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts
+  against the NVML constraints.
+- [ ] Harden the unit further (`SystemCallFilter=@system-service`,
+  `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
+  re-check that NVML and cgo still work on CachyOS.
 - [ ] Add Wails to `go.mod`; system tray with state (Folding / Paused by game /
   Battery) and current TDP. The GUI stays unprivileged.
 - [ ] GUI handles the daemon being down (shows "daemon not running", no crash).
@@ -79,241 +108,57 @@ Design and decisions: `docs/DAEMON_PLAN.md`. Implemented in
 ### 4. M4 (issue #4): CI, packaging and release
 
 - [ ] CI in `.github/workflows`: build, `go test -race`, `go vet` and `gofmt`
-  on Linux (CGO) and macOS. Set this up early, ideally during step 1.
+  on Linux (CGO) and macOS.
 - [ ] `govulncheck` in CI.
-- [ ] AUR `PKGBUILD`: daemon, systemd unit and GUI.
+- [ ] Renovate targeting `develop` (`baseBranches`), with `config:recommended`
+  and `gomodTidy`; `renovate.json` lives on `main`.
+- [ ] AUR `PKGBUILD`: daemon, systemd unit and GUI. Declare the legacy
+  autofold setup in `conflicts` and document in the README that
+  `autofold.service` must be disabled. It is a **user** unit:
+  `systemctl --user disable --now autofold`. With both running, autofold
+  freezes the FAH container (`docker pause`) and EcoFold cannot reach the
+  API.
 - [ ] macOS `.dmg` (telemetry + FAH control only; no TDP on Apple Silicon).
 - [ ] README with install, permissions and known limitations.
 - [ ] Tag `v0.1.0` on `main` once every box above is ticked.
 
-### Housekeeping (any time)
+## Open risks
 
-- [x] Disable the legacy `autofold.service` (user unit running
-  `~/folding/auto_fold.py`) on CachyOS (2026-11-13). It changed the power
-  limit with `sudo nvidia-smi -pl` and froze the FAH container with
-  `docker pause`; a frozen container cannot answer the FAH API, so EcoFold
-  cannot pause or resume it. The two must never run together.
-- [ ] AUR `PKGBUILD`: declare the legacy autofold setup in `conflicts` and
-  document in the README that `autofold.service` must be disabled.
+- [ ] **R5 CPU-only renders pause folding.** An app with a CUDA context that
+  renders on the CPU (Blender Cycles on CPU: ~1140 % CPU, 1487 MiB, GPU at
+  0 %) matches the compute-contention rule, so FAH pauses with an idle GPU.
+  Accepted for `v0.1.0` (costs folding time only). Fix idea: require a drop of
+  the FAH core's own SM (it fell from ~95 % to 49-80 % under the OptiX render
+  and does not move under a CPU render); calibrate against its normal 75-98 %
+  swing.
+- [ ] **M2-BLOCK fallback.** Drivers without per-process utilization now
+  latch the daemon into `Degraded` (no game detection, default limit). A
+  fallback detector would restore game detection on those systems. Layer 2
+  can help (a session plus `GPUMemThresholdMiB` of VRAM), but it needs the
+  daemon to keep collecting in `Degraded` mode instead of latching.
+- [ ] **M4 Mutex held during blocking NVML calls.** Still a hypothesis. The
+  daemon bounds the exit restore and `ExecStopPost` is the backstop; reproduce
+  on hardware before changing `internal/gpu`.
+- [ ] **R3-1, R3-2** (accepted, see `CHAOS_REPORT_M3.md`): an unwritable
+  runtime dir loses pause ownership across restarts; any entry at the marker
+  path counts as ownership (root-only).
+- [ ] **L2-1** (accepted, see `CHAOS_REPORT_LAYER2.md`): a user process can
+  pose as `reaper SteamLaunch`; it only holds a pause its own load caused.
+
+## After v0.1.0
+
+- [ ] Evaluate a minimal privileged helper (`ecofold-powerctl`, started
+  through polkit/`pkexec`) so the daemon itself can run unprivileged. Today
+  NVML requires uid 0 for power limits.
+
+## Housekeeping
 
 - [ ] Publish the FAH container on `127.0.0.1:7396:7396` instead of
-  `0.0.0.0:7396` (see "FAH API exposed on the LAN" below).
-- [ ] Delete merged branches (`test/m1-chaos*`, `test/m1-nvml-integration`,
-  `revert-8-test/m1-nvml-integration`) and the agent worktrees in
-  `.claude/worktrees/`.
-
-## Open decision: v0.0.1 scope
-
-`docs/ROADMAP.md` defines Milestone 1 (`v0.0.1`) as "GPU Provider Interface
-(NVML + Mock) & FAH Controller". The `internal/fah/` package is empty (it
-contains only `.gitkeep`), so the FAH Controller is not implemented.
-
-Options:
-
-- (a) Implement the FAH Controller before tagging `v0.0.1`.
-- (b) Move the FAH Controller to Milestone 2 in the roadmap and tag `v0.0.1` as
-  "GPU Provider + macOS detector". This is the recommended option because it is
-  more accurate and faster.
-
-Status: resolved with option (a). The FAH Controller (`internal/fah`:
-`Controller` interface, FAH v8 WebSocket client and `MockController`) was
-implemented in branch `feat/m1-fah-controller` and verified on 2026-11-11
-against the real FAH v8.5.6 Docker container on CachyOS: the WebSocket upgrade
-without an `Origin` header returns 101, and a live run went from folding
-(project 18264) to paused and back to folding.
-
-- [ ] **FAH API exposed on the LAN.** The `foldingathome` container publishes
-  `0.0.0.0:7396`, so any host on the local network can pause or reconfigure
-  the client. EcoFold only connects over loopback; publish the port as
-  `127.0.0.1:7396:7396` instead. This is a deployment change, not a code change.
-
-## Blockers for v0.0.1
-
-- [x] **A1 (High) Unrecovered panic on binary plist**
-  - Where: `internal/detector/darwin_ioreg.go:90` and `:165`
-    (`ParseSmartBatteryPlist`, `ParseIOAcceleratorPlist`, and therefore
-    `BuildSnapshotFromPlists`).
-  - Problem: a 53-byte binary plist causes a panic. `howett.net/plist` v1.0.1
-    re-raises `runtime.Error`. Today the input comes from `ioreg` (XML), but a
-    panic in the root daemon would kill it before the TDP is restored.
-  - Fix: accept only XML and reject the `bplist` magic bytes. Wrap the decode
-    in `recover` and convert the panic into an error.
-
-- [x] **A2 (High) Fatal stack overflow on deeply nested XML**
-  - Where: `internal/detector/darwin_ioreg.go:16` (`maxPlistBytes`).
-  - Problem: an XML document nested deeply enough to stay under the 16 MiB
-    limit (about 15 MB) crashes the process. A Go stack overflow is fatal and
-    cannot be recovered with `recover`.
-  - Fix: scan the nesting depth before decoding and reject anything above a
-    limit (for example 64). Optionally lower `maxPlistBytes` to a size that is
-    realistic for `ioreg` output.
-
-- [x] **M1 (Medium) Quadratic CPU on binary plist with nesting chains**
-  - Where: same as A1.
-  - Problem: CPU stays at 100% for minutes on crafted binary input.
-  - Fix: resolved by the XML-only change in A1.
-
-- [x] **M2 (Medium) `RestoreDefaultPowerLimit` does not validate the default**
-  - Where: `internal/gpu/nvidia_linux.go:136`.
-  - Problem: the default limit read from NVML is applied without checking it
-    against the device constraints.
-  - Fix: read `GetPowerManagementLimitConstraints`, then clamp or reject the
-    default before calling `SetPowerManagementLimit`.
-
-- [x] **M5 (Medium) `NewEvaluator` only checks lower bounds**
-  - Where: `internal/detector/detector.go:151`.
-  - Problem: with `GPUUtilThresholdPct > 100`, folding is never paused for GPU
-    load (fail-open).
-  - Fix: reset values above 100 to their defaults (also
-    `GPUMemRequiresUtilPct`). Add a test for these cases.
-
-- [x] **M7 (Low) `make build-linux` silently builds the non-TDP stub**
-  - Where: `Makefile`, target `build-linux` (`GOOS=linux go build ./...`).
-  - Problem: on macOS, CGO is disabled, so `internal/gpu/stub_linux.go` is
-    compiled instead of the NVML provider. The build passes without any
-    power-limit control.
-  - Fix: warn or fail when `CGO_ENABLED != 1`, or rename the target so it is
-    clearly a compile-only check.
-
-Status: the six blockers above were fixed in branch `fix/m1-review-hardening`.
-M5 was extended to also bound `SustainedTicksRequired` (`> 60` resets to the
-default), and M2 also rejects a zero maximum constraint. The M2 change was
-compiled and tested on Linux with `CGO_ENABLED=1` on 2026-11-11 (see
-`docs/HARDENING_REVIEW.md`). `RestoreDefaultPowerLimit` was then verified end
-to end on the RTX 5060 with the opt-in `nvml_integration` test (PASS, limit
-restored to 145 W).
-
-## Residual risks (non-blocking)
-
-Found by the adversarial test pass on `fix/m1-review-hardening`.
-
-- [x] **R1 `FetchIOReg` reads unbounded output** (branch `fix/m1-residual-risks`)
-  - Where: `internal/detector/darwin_ioreg.go` (`FetchIOReg`).
-  - Problem: `Output()` buffers all of `ioreg`'s stdout before the size check.
-  - Fix: read stdout through `io.LimitReader(maxPlistBytes+1)`.
-  - Resolution: `FetchIOReg` reads through `cmd.StdoutPipe()` and
-    `io.LimitReader`, and kills `ioreg` when the output exceeds the cap.
-
-- [x] **R2 16 MiB plist cap is larger than needed** (branch `fix/m1-residual-risks`)
-  - Problem: `howett.net/plist` materializes roughly 10-15x the input in
-    memory (about 180 MB worst case). Real `ioreg -d 1` output is under 1 MiB.
-  - Fix: lower `maxPlistBytes` (for example to 2 MiB) and adjust the tests.
-  - Resolution: `maxPlistBytes` is 2 MiB. The binary plist check now ignores
-    leading whitespace. Size-dependent tests and benchmarks were adjusted.
-
-- [ ] **R3 `GPUUtilThresholdPct = 100` plus a huge `GPUMemThresholdMiB`**
-  - Problem: both values are in range, but together 99% utilization never
-    pauses. Pinned by `TestMaxUtilThresholdPlusHugeMemDisablesPause`.
-  - Fix: decide on an upper bound for `GPUMemThresholdMiB` or for the
-    utilization threshold.
-
-- [ ] **R4 Transient empty `AppleSmartBattery` output folds at full power**
-  - Problem: an empty array is treated as a desktop Mac (`OnAC=true`,
-    `BatteryPct=100`). A transient empty result on a laptop would fold as if
-    plugged in.
-  - Fix: cache `HasBattery` from the first successful read and treat a later
-    empty result as an error.
-
-## M2: Linux per-process collector and load cooldown (branch `fix/m1-ch11-nvml-lifecycle`)
-
-- [x] **M2 Linux per-process collector and load cooldown**
-  - Where: `internal/detector/linux_collector.go`, `internal/detector/detector.go`,
-    `internal/gpu/nvidia_linux.go`, `internal/gpu/provider.go`.
-  - Problem: Folding@home keeps the GPU at high device-wide utilization and
-    memory use, so aggregate metrics would pause folding permanently. Resuming
-    the instant a game releases the GPU also causes oscillation between folding
-    and full-power states.
-  - Resolution: the Linux collector reads `/proc/<pid>/comm` and `cmdline` to
-    filter out the Folding@home core, client, desktop compositors, Steam,
-    browser GPU/renderer helpers, and other non-game processes. `gamescope` is
-    deliberately kept visible because games can run inside it. The evaluator
-    uses per-process SM utilization from NVML when available, ignores global
-    utilization when `GPUProcesses` is non-nil, and latches `StatePausedLoad`
-    until `CooldownTicksRequired` consecutive load-free ticks elapse (clamped to
-    [60, 90] ticks, i.e. two to three minutes at the planned 2 s tick). If the
-    battery demands a pause while the load latch is active, `StatePausedBattery`
-    is returned instead (no cooldown). Covered by unit tests.
-
-- [ ] **M2-BLOCK per-process GPU utilization unsupported**
-  - Where: `internal/detector/linux_collector.go:Collect`.
-  - Problem: some NVIDIA drivers/ GPUs return `ERROR_NOT_SUPPORTED` for
-    `GetProcessUtilization`, so the collector cannot attribute utilization to
-    individual processes and cannot distinguish a game from Folding@home. The
-    collector now returns an explicit error when every graphics process has
-    `SMUtilValid=false`, so the caller keeps its previous decision instead of
-    falsely reporting "no load". EcoFold cannot pause on game load on those
-    systems until a fallback (e.g. a process-name heuristic or corrected
-    device-wide utilization) is implemented.
-  - Fix: implement a fallback load detector for systems without per-process
-    utilization, or document this hardware limitation and fail closed at daemon
-    startup.
-
-- [x] **M2-INTEGRATION Linux collector read-only integration test**
-  - Where: `internal/detector/linux_collector_integration_test.go`.
-  - Resolution: opt-in `nvml_integration` test that exercises the real
-    collector. It skips when there are no graphics clients and therefore does
-    not claim to verify the FahCore filter; that filter is covered by unit
-    tests.
-
-## Deferred to the daemon milestone (M3)
-
-These items will be resolved when the daemon lifecycle and SIGTERM handling
-are designed.
-
-- [x] **M3 NVML shutdown is process-global** (branch `fix/m1-ch11-nvml-lifecycle`)
-  - Where: `internal/gpu/nvidia_linux.go:19-48`.
-  - Problem: two `NvidiaProvider` instances interfere with each other, because
-    `nvml.Shutdown` affects the whole process.
-  - Resolution: `acquireNVML`/`releaseNVML` keep a process-wide reference
-    count. `Init` and `Shutdown` are idempotent per provider, a stray
-    `Shutdown` before `Init` is a no-op, and only the last `Shutdown` calls
-    `nvml.Shutdown`. Covered by `internal/gpu/nvidia_lifecycle_linux_test.go`.
-
-- [ ] **M4 Mutex is held during blocking NVML calls**
-  - Where: all methods in `internal/gpu/nvidia_linux.go`.
-  - Problem: the mutex is held during blocking NVML calls, which could prevent
-    restoring the TDP on SIGTERM. This is a hypothesis and has not been
-    reproduced.
-  - Fix: give the restore path a timeout or bound it, or do not serialize
-    restoration behind telemetry reads.
-
-- [x] **M6 MockProvider does not mirror the real lifecycle** (branch `fix/m1-residual-risks`)
-  - Where: `internal/gpu/mock_darwin.go`.
-  - Problem: the mock works without `Init`, and `Shutdown` is a no-op. NVML
-    fails when it is not initialized.
-  - Fix: return a "not initialized" error before `Init` and after `Shutdown`,
-    matching the Linux stub behavior.
-  - Resolution: `MockProvider` and the Linux `stubProvider` track an
-    `initialized` flag and return `gpu: provider not initialized` before `Init`
-    and after `Shutdown`. Covered by `TestMockProviderLifecycle`.
-
-## Additional hardening
-
-- [x] **`MinBatteryPct > 100` disables battery folding** (branch
-  `fix/m1-residual-risks`). An unreachable threshold always paused on battery.
-  `NewEvaluator` now resets values above 100 to the default (50). Covered by
-  `TestMinBatteryPctAboveHundredIsClamped`.
-
-Items are marked `[x]` when resolved. Reference the commit that fixes each item
-in the checklist entry.
-
-See `docs/HARDENING_REVIEW.md` for the review findings and the Linux verification procedure.
-
-## Chaos pass follow-ups (see `docs/CHAOS_REPORT.md`)
-
-- [x] **CH-2 `Close` does not abort an in-flight dial.** Fixed with a client
-  context that `Close` cancels. Covered by `TestCloseAbortsInFlightDial`.
-- [x] **CH-7 Linux compile check.** `make test` passed on CachyOS with the
-  `mwToWCeil` change in `nvidia_linux.go` (2026-11-11).
-- [x] **CH2 H1: never skip a pause because FAH looks idle.** A running unit
-  with an unreadable project is reported as `idle`. When a game is detected,
-  the daemon must send `Pause` regardless of `Status.State`.
-- [x] **CH-10 `Resume` unpauses every group.** The daemon must remember whether
-  it paused folding itself, and must not resume a pause the user made by hand.
-- [x] **CH-11 NVML lifecycle.** Calling `Init` twice leaked an NVML reference,
-  and `Shutdown` before `Init` still called `nvml.Shutdown`. Fixed together
-  with M3 using a process-wide reference counter plus idempotent per-provider
-  `Init`/`Shutdown`.
-- [ ] **Go 1.27.4.** govulncheck reports GO-2026-6859 (`net/http` server) in
-  Go 1.27.3. Only tests import `net/http` today, but upgrade both machines
-  before the daemon gains an HTTP or IPC server.
+  `0.0.0.0:7396`: today any host on the LAN can pause or reconfigure FAH.
+- [ ] CachyOS test machine: the installed `/usr/bin/ecofold-daemon` is a manual
+  build of `fix/m2-compute-processes` (same code as `develop` after PR #21);
+  reinstall with `~/.cache/ecofold-verify/reinstall.sh` after daemon changes
+  until the AUR package exists. The legacy `autofold.service` (user unit) is
+  disabled. The old local branch `test/m1-nvml-integration` in
+  `~/Documents/GitHub/ecofoldGPU` only holds a commit already applied on
+  `develop`; delete it with `git branch -D` when convenient.

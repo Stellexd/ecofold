@@ -65,8 +65,12 @@ converts the requested watts safely to milliwatts, and rejects values outside
 the inclusive device range before calling NVML to apply the limit. The default
 limit is already supplied by NVML in milliwatts, so
 `RestoreDefaultPowerLimit` applies that value directly. `GetGraphicsProcesses`
-uses NVML's graphics-running-process list and converts each process's GPU-memory
-usage from bytes to MiB. It enriches each process with per-process SM
+joins NVML's graphics- and compute-running-process lists (a C+G process is kept
+once, with the larger memory figure; `ERROR_NOT_SUPPORTED` on the compute list
+falls back to graphics only) and converts each process's GPU-memory usage from
+bytes to MiB. Compute processes are needed for CUDA work such as Blender
+Cycles/OptiX or DaVinci Resolve; the Folding@home core is compute too and is
+dropped by the collector's ignore list. It enriches each process with per-process SM
 utilization from `GetProcessUtilization`, passing a high-water timestamp so
 each call returns only fresh samples. Device-wide utilization is deliberately
 not used, because the Folding@home core keeps the GPU busy. `ERROR_NOT_FOUND`

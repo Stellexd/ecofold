@@ -9,7 +9,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
 )
@@ -42,8 +45,10 @@ var DefaultIgnoredProcesses = []string{
 	"mangohud",
 }
 
-// browserBinaries are browsers whose GPU/renderer helpers hold VRAM and
-// utilization without the user playing a game.
+// browserBinaries are browsers and Chromium/Electron/CEF desktop apps whose
+// GPU/renderer helpers hold VRAM and utilization without the user playing a
+// game. Only their --type=gpu-process/--type=renderer helpers are dropped;
+// the main process still counts if it crosses the thresholds.
 var browserBinaries = []string{
 	"chrome",
 	"chromium",
@@ -51,9 +56,15 @@ var browserBinaries = []string{
 	"google-chrome-stable",
 	"firefox",
 	"firefox-bin",
+	"librewolf",
 	"brave",
 	"brave-browser",
 	"msedge",
+	"electron",
+	"discord",
+	"slack",
+	"code",
+	"spotify",
 }
 
 // LinuxCollector builds SystemSnapshot values on Linux from the GPU provider
@@ -71,6 +82,24 @@ type LinuxCollector struct {
 	ignored  []string
 	// readFile is the /proc read seam. Production uses os.ReadFile.
 	readFile func(string) ([]byte, error)
+	// sessions are the game sessions (layer 2) seen so far, pruned every
+	// Collect once their anchor process exits.
+	sessions map[string]sessionAnchor
+	// pause is the user's pause list (see ParsePauseProcesses).
+	pause []string
+	// listPIDs is the /proc listing seam. Production reads /proc.
+	listPIDs func() ([]uint32, error)
+	// cpuPrev holds the last CPU reading of each compute process; now is the
+	// clock seam for CPU rates.
+	cpuPrev map[uint32]cpuSample
+	now     func() time.Time
+}
+
+// SetPauseProcesses sets the user's pause list. Patterns must come from
+// ParsePauseProcesses. While a running process matches, every snapshot reports
+// it in UserPauseMatches.
+func (c *LinuxCollector) SetPauseProcesses(patterns []string) {
+	c.pause = append([]string(nil), patterns...)
 }
 
 // NewLinuxCollector returns a collector backed by p with the default ignore
@@ -125,6 +154,8 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 	}
 
 	kept := make([]gpu.ProcessInfo, 0, len(procs))
+	argvs := make(map[uint32][]string, len(procs))
+	var computePIDs []uint32
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
 			return SystemSnapshot{}, err
@@ -134,14 +165,102 @@ func (c *LinuxCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 			continue
 		}
 		kept = append(kept, proc)
+		argvs[proc.PID] = c.argv(proc.PID)
+		if proc.Compute {
+			computePIDs = append(computePIDs, proc.PID)
+		}
 	}
+	cpu := c.computeCPU(computePIDs)
+	bySession, live := c.gameSessions(argvs)
+	matches := c.userPauseMatches(ctx)
 
 	return SystemSnapshot{
-		HasBattery:   false,
-		OnAC:         true,
-		GPUClass:     tel.Name,
-		GPUProcesses: kept,
+		HasBattery:         false,
+		OnAC:               true,
+		GPUClass:           tel.Name,
+		GPUProcesses:       kept,
+		GPUProcessSessions: bySession,
+		LiveGameSessions:   live,
+		UserPauseMatches:   matches,
+		ProcessCPUPct:      cpu,
 	}, nil
+}
+
+// userPauseMatches scans every process in /proc once and returns the sorted,
+// deduplicated names that match the pause list. A /proc listing error yields
+// no matches: the pause list is a preference, and a broken /proc already fails
+// the GPU side of Collect.
+func (c *LinuxCollector) userPauseMatches(ctx context.Context) []string {
+	if len(c.pause) == 0 {
+		return nil
+	}
+	list := c.listPIDs
+	if list == nil {
+		list = listProcPIDs
+	}
+	pids, err := list()
+	if err != nil {
+		return nil
+	}
+	found := map[string]bool{}
+	for _, pid := range pids {
+		if ctx.Err() != nil || len(found) >= maxPauseMatches {
+			break
+		}
+		name := ""
+		if comm, err := c.read(procCommPath(pid)); err == nil {
+			name = strings.TrimSpace(string(comm))
+		}
+		if !matchPattern(c.pause, name) {
+			argv := c.argv(pid)
+			if len(argv) == 0 {
+				continue
+			}
+			name = anyBase(argv[0])
+			if !matchPattern(c.pause, name) {
+				continue
+			}
+		}
+		if matchPattern(foldingProcesses, name) {
+			continue
+		}
+		found[strings.ToLower(name)] = true
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(found))
+	for name := range found {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// listProcPIDs returns the numeric entries of /proc.
+func listProcPIDs() ([]uint32, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, err
+	}
+	pids := make([]uint32, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if pid, err := strconv.ParseUint(e.Name(), 10, 32); err == nil {
+			pids = append(pids, uint32(pid))
+		}
+	}
+	return pids, nil
+}
+
+// read is the /proc read seam with the os.ReadFile default.
+func (c *LinuxCollector) read(path string) ([]byte, error) {
+	if c.readFile == nil {
+		return os.ReadFile(path)
+	}
+	return c.readFile(path)
 }
 
 // isIgnored resolves a PID to a process name and reports whether it must be
@@ -190,23 +309,7 @@ func (c *LinuxCollector) isIgnored(pid uint32) (ignored, gone bool) {
 
 // matchesIgnored applies the case-insensitive exact/prefix rules.
 func (c *LinuxCollector) matchesIgnored(name string) bool {
-	name = strings.ToLower(strings.TrimSpace(name))
-	if name == "" {
-		return false
-	}
-	for _, pattern := range c.ignored {
-		p := strings.ToLower(pattern)
-		if strings.HasSuffix(p, "*") {
-			if strings.HasPrefix(name, strings.TrimSuffix(p, "*")) {
-				return true
-			}
-			continue
-		}
-		if name == p {
-			return true
-		}
-	}
-	return false
+	return matchPattern(c.ignored, name)
 }
 
 // isBrowserHelper reports whether base is a browser and argv identifies one of

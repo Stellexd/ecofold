@@ -7,8 +7,11 @@ Decisions taken on 2026-11-13: F2 reword the E2E check; F3 periodic `ioreg`
 allowed (skill amended); F7 power first in both directions, and `Resume` only
 after the eco cap succeeds (or power limits are unsupported); §3.6 never
 resume FAH on exit, keep the marker. Added during implementation:
-`StartupHoldTicks` (a pause inherited through the marker is not resumed until
-the evaluator has seen `SustainedTicksRequired` snapshots), startup restore of
+`StartupHoldTicks` (a pause inherited through the marker is not resumed, and
+the GPU keeps the default limit, until the evaluator has seen
+`CooldownTicksRequired` snapshots; it was `SustainedTicksRequired` until the
+2026-11-14 CachyOS test showed a restart during a game capping it and resuming
+folding after 6 s), startup restore of
 the default limit (an unknown limit left by a crash is normalized), and
 `gpu.ErrNoPermission` so NO_PERMISSION can be detected with `errors.Is`.
 
@@ -145,13 +148,17 @@ an NVML call that never returns (a driver hang). Mitigation:
 M4 stays open (a hypothesis) until it is reproduced on CachyOS. No change to
 `internal/gpu` is planned.
 
-### F9. NVML permissions: `CAP_SYS_ADMIN` vs root is unverified
+### F9. NVML permissions: root is required (verified 2026-11-14)
 
 NVIDIA's NVML docs say `SetPowerManagementLimit` requires "root/admin" and
 returns `NVML_ERROR_NO_PERMISSION` otherwise. Third-party reports (Zeus) say the
-real check is `CAP_SYS_ADMIN`. This has to be tested on CachyOS (see §6). Note
-that `CAP_SYS_ADMIN` is close to root anyway: the value of the systemd unit is
-that it drops **every other** capability and sandboxes the filesystem.
+real check is `CAP_SYS_ADMIN`. On CachyOS (RTX 5060, driver 620.70.06) a
+`User=ecofold` process with `CAP_SYS_ADMIN` effective and ambient
+(`CapEff=0x200000`) still got `Insufficient Permissions`; the same unit as
+`User=root` works. File capabilities (`setcap`) cannot help either. The unit
+therefore runs as root. `CAP_SYS_ADMIN` is close to root anyway: the value of
+the systemd unit is that it drops **every other** capability
+(`CapabilityBoundingSet=CAP_SYS_ADMIN`) and sandboxes the filesystem.
 
 ---
 
@@ -385,7 +392,7 @@ compile check). Baseline on 2026-11-13: all three pass on `develop`.
 
 ---
 
-## 6. systemd unit (draft, unverified)
+## 6. systemd unit (verified on CachyOS 2026-11-14)
 
 ```ini
 [Unit]
@@ -401,16 +408,14 @@ Restart=on-failure
 RestartSec=5
 TimeoutStopSec=10
 
-User=ecofold
-Group=ecofold
-SupplementaryGroups=video
-AmbientCapabilities=CAP_SYS_ADMIN
+User=root
+Group=root
 CapabilityBoundingSet=CAP_SYS_ADMIN
 NoNewPrivileges=yes
 
 RuntimeDirectory=ecofold
 RuntimeDirectoryMode=0750
-RuntimeDirectoryPreserve=restart
+RuntimeDirectoryPreserve=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
@@ -424,7 +429,44 @@ DevicePolicy=closed
 WantedBy=multi-user.target
 ```
 
-Things to verify on CachyOS, in order:
+Results on CachyOS (RTX 5060, driver 620.70.06, 2026-11-14). Each item below
+was checked by a script that installed the unit and drove it with `systemctl`:
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `SetPowerManagementLimit` as `User=ecofold` + `CAP_SYS_ADMIN` | FAIL (`Insufficient Permissions`); PASS as `User=root` (F9) |
+| 2 | `/proc/<pid>/comm` and `cmdline` of user processes under `ProtectSystem=strict` | PASS (read from the service's mount namespace) |
+| 3 | `ExecStopPost` after `systemctl kill -s KILL` | PASS: 145 W within 1 s |
+| 4 | `RuntimeDirectoryPreserve=restart` across `Restart=` | PASS: `/run/ecofold` survived |
+| 5 | `DeviceAllow` (`nvidiactl`, `nvidia0`, `nvidia-uvm`) | PASS: no device errors |
+| 6 | End to end with Baldur's Gate 3 | PASS: `paused_load` + 145 W + FAH paused through the API; 2 min after closing the game, 123 W and FAH folding |
+
+Found during check 6: the legacy `autofold.service` runs as a **user** unit
+(`~/.config/systemd/user/`), so `systemctl is-active autofold` (system scope)
+misses it. With both running, autofold froze the FAH container with
+`docker pause` and EcoFold's API calls timed out. Packaging must disable it
+(`systemctl --user disable --now autofold`).
+
+Found during the layer 2 end-to-end test (2026-11-14): with
+`RuntimeDirectoryPreserve=restart`, a `systemctl stop` + `start` while a game
+held a pause (the reinstall script) deleted `/run/ecofold`. The new daemon saw
+FAH paused without a marker, treated it as a user pause and never resumed it;
+the power side recovered (123 W after the cooldown). The unit now uses
+`RuntimeDirectoryPreserve=yes`: the marker survives stop/start and is still
+cleared on reboot (`/run` is tmpfs). Trade-off: if the user pauses FAH by hand
+while the daemon is stopped and a stale marker exists, the next start resumes
+that pause.
+
+Re-verified the same day: `stop` + `start` with Deadlock running started with
+`paused_by_daemon=true` and the daemon itself resumed folding. The same run
+showed that the restarted daemon capped the GPU to 123 W on its first tick and
+resumed folding after the 3-tick startup hold, because a restart loses the
+evaluator's cooldown. `StartupHoldTicks` now equals `CooldownTicksRequired`
+(60 ticks, 2 min) and the default limit stays in place during the hold
+(`TestRestartDuringGameKeepsDefaultLimit`). Cost: if FAH was resumed by hand
+while a stale marker exists, it folds uncapped for up to 2 minutes.
+
+Original checklist, in order:
 1. `SetPowerManagementLimit` works as `User=ecofold` with only
    `CAP_SYS_ADMIN`. If it returns `NO_PERMISSION`, fall back to `User=root`
    and keep the `CapabilityBoundingSet` and sandbox lines.

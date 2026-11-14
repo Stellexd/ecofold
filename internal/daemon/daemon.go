@@ -64,10 +64,11 @@ type Config struct {
 	// RuntimeDir holds the pause-ownership marker. Required.
 	RuntimeDir string
 	// StartupHoldTicks delays resuming a pause inherited through the marker
-	// until the evaluator has seen this many snapshots, so a restart while a
-	// game is running does not resume folding before the load is detected
-	// again. It should match detector.Config.SustainedTicksRequired.
-	// Default: 3.
+	// until the evaluator has seen this many snapshots, and keeps the default
+	// power limit meanwhile. A restart loses the evaluator's cooldown, so the
+	// hold replaces it: a game still running (even idle in a menu) is neither
+	// capped nor has folding resumed under it before a full cooldown. It
+	// should match detector.Config.CooldownTicksRequired. Default: 60.
 	StartupHoldTicks int
 
 	// CollectTimeout bounds one Collect call. Default: 1.5 s.
@@ -93,7 +94,7 @@ func DefaultConfig() Config {
 	return Config{
 		Tick:             2 * time.Second,
 		EcoWatts:         123,
-		StartupHoldTicks: 3,
+		StartupHoldTicks: 60,
 		CollectTimeout:   1500 * time.Millisecond,
 		StatusTimeout:    500 * time.Millisecond,
 		ActionTimeout:    1500 * time.Millisecond,
@@ -139,6 +140,7 @@ type Daemon struct {
 	powerEnabled bool // false after NVML_ERROR_NO_PERMISSION or in Degraded
 	ecoWatts     int
 	capApplied   bool // the eco cap is (or may be) in effect
+	limitUnknown bool // a restore failed, so the real limit is unknown
 	pausedByUs   bool // the current FAH pause is ours (mirrored by the marker)
 	pending      fahOp
 	degraded     bool
@@ -253,7 +255,7 @@ func (d *Daemon) start() error {
 			d.log.Error("no permission to change the GPU power limit; running pause-only", "err", err)
 		case err != nil:
 			d.log.Warn("could not restore the default power limit at startup", "err", err)
-			d.capApplied = true
+			d.capApplied, d.limitUnknown = true, true
 		}
 	}
 
@@ -358,7 +360,12 @@ func (d *Daemon) apply(ctx context.Context, decision detector.OperatingState) {
 		if d.pending == opPause {
 			d.pending = opNone // the pause never landed; there is nothing to resume
 		}
-		if d.applyCap() && d.pausedByUs && !hold {
+		switch {
+		case hold && d.pausedByUs:
+			// The inherited pause may still belong to a running game: keep
+			// the default limit until the hold ends.
+			d.restoreIfCapped()
+		case d.applyCap() && d.pausedByUs:
 			d.pending = opResume
 		}
 	}
@@ -389,7 +396,7 @@ func (d *Daemon) claimPause(ctx context.Context) {
 // applyCap applies the eco power limit if needed and reports whether folding
 // may resume.
 func (d *Daemon) applyCap() bool {
-	if !d.powerEnabled || d.capApplied {
+	if !d.powerEnabled || (d.capApplied && !d.limitUnknown) {
 		return true
 	}
 	if err := d.gpu.SetPowerLimit(d.ecoWatts); err != nil {
@@ -402,7 +409,7 @@ func (d *Daemon) applyCap() bool {
 			"watts", d.ecoWatts, "err", err)
 		return false
 	}
-	d.capApplied = true
+	d.capApplied, d.limitUnknown = true, false
 	d.log.Info("eco power limit applied", "watts", d.ecoWatts)
 	return true
 }
@@ -417,7 +424,7 @@ func (d *Daemon) restoreIfCapped() {
 		d.log.Warn("could not restore the default power limit; retrying next tick", "err", err)
 		return
 	}
-	d.capApplied = false
+	d.capApplied, d.limitUnknown = false, false
 	d.log.Info("default power limit restored")
 }
 

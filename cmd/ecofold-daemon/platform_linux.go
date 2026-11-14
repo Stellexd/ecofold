@@ -14,6 +14,11 @@ func defaultRuntimeDir() string {
 	return "/run/ecofold"
 }
 
-func newCollector(p gpu.Provider) daemon.Collector {
-	return detector.NewLinuxCollector(p)
+// pauseListSupported reports whether newCollector honors the pause list.
+const pauseListSupported = true
+
+func newCollector(p gpu.Provider, pause []string) daemon.Collector {
+	c := detector.NewLinuxCollector(p)
+	c.SetPauseProcesses(pause)
+	return c
 }
