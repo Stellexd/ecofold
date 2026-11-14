@@ -39,6 +39,7 @@ func run() int {
 		runtimeDir  = flag.String("runtime-dir", defaultRuntimeDir(), "directory for the pause-ownership marker")
 		restoreOnly = flag.Bool("restore-power-limit", false, "restore the default GPU power limit and exit (for systemd ExecStopPost)")
 		verbose     = flag.Bool("debug", false, "enable debug logging")
+		pauseList   = flag.String("pause-processes", "", "comma-separated process names that stop folding while they run, e.g. \"blender,obs\" (Linux; trailing * is a prefix match)")
 	)
 	flag.Parse()
 
@@ -59,6 +60,14 @@ func run() int {
 	if *ecoWatts <= 0 {
 		logger.Error("invalid -eco-watts", "watts", *ecoWatts)
 		return 2
+	}
+	pause, err := detector.ParsePauseProcesses(*pauseList)
+	if err != nil {
+		logger.Error("invalid -pause-processes", "err", err)
+		return 2
+	}
+	if len(pause) > 0 && !pauseListSupported {
+		logger.Warn("-pause-processes is not supported on this platform; ignoring it", "patterns", pause)
 	}
 
 	var ctrl fah.Controller
@@ -81,11 +90,14 @@ func run() int {
 	cfg.RuntimeDir = *runtimeDir
 	cfg.StartupHoldTicks = detCfg.CooldownTicksRequired
 	cfg.Logger = logger
+	if len(pause) > 0 {
+		logger.Info("pause list active", "patterns", pause)
+	}
 
 	d, err := daemon.New(cfg, daemon.Deps{
 		GPU:       provider,
 		FAH:       ctrl,
-		Collector: newCollector(provider),
+		Collector: newCollector(provider, pause),
 		Evaluator: detector.NewEvaluator(detCfg),
 	})
 	if err != nil {

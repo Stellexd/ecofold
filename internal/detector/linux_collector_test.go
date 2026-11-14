@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"reflect"
 	"testing"
 
 	"github.com/Stellexd/ecofold/internal/gpu"
@@ -349,5 +350,56 @@ func TestLinuxCollectorIgnoresDockerFoldingCore(t *testing.T) {
 	}
 	if len(snap.GPUProcesses) != 0 {
 		t.Fatalf("GPUProcesses = %+v, se esperaba el core de FAH filtrado", snap.GPUProcesses)
+	}
+}
+
+// TestLinuxCollectorUserPauseList: the pause list matches any process by comm
+// or argv[0] (comm is cut at 15 characters), never the FAH core, and is not
+// scanned when empty.
+func TestLinuxCollectorUserPauseList(t *testing.T) {
+	files := map[string]string{
+		procCommPath(1):    "systemd\n",
+		procCmdlinePath(1): "/usr/lib/systemd/systemd\x00",
+		procCommPath(2):    "obs\n",
+		procCmdlinePath(2): "/usr/bin/obs\x00",
+		procCommPath(3):    "davinci-resolv\n", // truncated comm
+		procCmdlinePath(3): "/opt/resolve/bin/davinci-resolve-studio\x00",
+		procCommPath(4):    "FahCore_27\n",
+		procCmdlinePath(4): "/config/cores/FahCore_27\x00",
+		procCommPath(5):    "kworker/0:1\n", // kernel thread, empty cmdline
+		procCmdlinePath(5): "",
+	}
+	c := collectorWith(&fakeGPU{}, files)
+	scans := 0
+	c.listPIDs = func() ([]uint32, error) { scans++; return []uint32{1, 2, 3, 4, 5, 99}, nil }
+
+	snap, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if scans != 0 || snap.UserPauseMatches != nil {
+		t.Fatalf("lista vacía: scans=%d matches=%v", scans, snap.UserPauseMatches)
+	}
+
+	// The collector also guards against a FAH pattern that bypassed parsing.
+	c.SetPauseProcesses([]string{"obs", "davinci-resolve*", "fahcore*"})
+	snap, err = c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if want := []string{"davinci-resolve-studio", "obs"}; !reflect.DeepEqual(snap.UserPauseMatches, want) {
+		t.Fatalf("UserPauseMatches = %v, se esperaba %v", snap.UserPauseMatches, want)
+	}
+}
+
+// TestLinuxCollectorUserPauseListErrors: an unreadable /proc yields no match
+// and no error.
+func TestLinuxCollectorUserPauseListErrors(t *testing.T) {
+	c := collectorWith(&fakeGPU{}, nil)
+	c.SetPauseProcesses([]string{"obs"})
+	c.listPIDs = func() ([]uint32, error) { return nil, fs.ErrPermission }
+	snap, err := c.Collect(context.Background())
+	if err != nil || snap.UserPauseMatches != nil {
+		t.Fatalf("snap=%v err=%v", snap.UserPauseMatches, err)
 	}
 }

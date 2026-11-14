@@ -19,6 +19,10 @@ func defaultRuntimeDir() string {
 	return filepath.Join(os.TempDir(), "ecofold")
 }
 
-func newCollector(gpu.Provider) daemon.Collector {
+// pauseListSupported reports whether newCollector honors the pause list. The
+// macOS collector reads ioreg only and has no per-process view yet.
+const pauseListSupported = false
+
+func newCollector(gpu.Provider, []string) daemon.Collector {
 	return detector.NewDarwinCollector()
 }

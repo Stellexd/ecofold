@@ -96,7 +96,7 @@ func TestMergeProcessListsDeduplicatesCPlusG(t *testing.T) {
 		{Pid: 30, UsedGpuMemory: 800}, // FahCore or Blender
 		{Pid: 30, UsedGpuMemory: 900}, // second context of the same PID
 	}
-	got := mergeProcessLists(graphics, compute)
+	got, isCompute := mergeProcessLists(graphics, compute)
 	want := []nvml.ProcessInfo{{Pid: 10, UsedGpuMemory: 150}, {Pid: 20, UsedGpuMemory: 300}, {Pid: 30, UsedGpuMemory: 900}}
 	if len(got) != len(want) {
 		t.Fatalf("merge = %+v, se esperaba %+v", got, want)
@@ -106,7 +106,10 @@ func TestMergeProcessListsDeduplicatesCPlusG(t *testing.T) {
 			t.Fatalf("merge[%d] = %+v, se esperaba %+v", i, got[i], want[i])
 		}
 	}
-	if got := mergeProcessLists(nil, nil); len(got) != 0 {
-		t.Fatalf("listas vacías: %+v", got)
+	if !isCompute[10] || isCompute[20] || !isCompute[30] {
+		t.Fatalf("isCompute = %v, se esperaba {10, 30}", isCompute)
+	}
+	if got, isCompute := mergeProcessLists(nil, nil); len(got) != 0 || len(isCompute) != 0 {
+		t.Fatalf("listas vacías: %+v %v", got, isCompute)
 	}
 }

@@ -55,8 +55,20 @@ Branch `feat/m2-proton-watcher`.
   graphics process, so it could not pause folding under the creative-app
   policy. Found during calibration; the FAH core now shows up (89-94 % SM)
   and stays ignored.
+- [x] Compute contention: a non-ignored compute process with >= 256 MiB and
+  an SM sample above 0 in the last 5 ticks counts as load, because the FAH
+  core starves other CUDA work (Blender rendered at 0-20 % SM next to
+  FahCore at 61-98 %). Idle Blender (437 MiB, 0 %) keeps folding.
+- [x] User pause list (`-pause-processes`, `ParsePauseProcesses`): matching
+  processes stop folding while they run, whatever their GPU use. Expose it in
+  the M3 GUI and socket.
+- [ ] Verify compute contention on hardware with the daemon installed (Blender
+  render pauses folding, idle Blender does not), and check that mpv/VLC with
+  CUDA decoding (`hwdec=nvdec`) does not count as compute contention.
 - [ ] Run the app compatibility matrix below and calibrate the thresholds
-  (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`.
+  (45 % / 25 % / 1500 MiB); update `internal/detector/README.md`. A 40-minute
+  run on 2026-11-14 covered only LibreWolf (max 22 % SM, 293 MiB) and
+  Spectacle (17 %), with no false pause in 1200 ticks.
 - [x] **R3** and **R4** fixed in `fix/m2-detector-bounds` (see "Open risks").
 
 #### App compatibility matrix
@@ -103,6 +115,11 @@ evaluator stays app-agnostic and the user's foreground work wins. On Linux,
 Chromium/Electron/CEF helpers that are not real load (Discord, Slack, VS Code,
 Spotify) are filtered through `browserBinaries` / `DefaultIgnoredProcesses`;
 calibrate the thresholds with this policy in mind.
+
+Follow-up (2026-11-14): thresholds alone cannot catch CUDA work, because the
+FAH core starves it. Two design rules cover it instead of per-app tuning:
+compute contention (above) and an explicit user pause list for apps that must
+always stop folding.
 
 ### 3. M3 (issue #3): IPC and GUI
 

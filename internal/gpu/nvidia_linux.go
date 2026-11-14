@@ -251,7 +251,7 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 	default:
 		return nil, fmtError("GetComputeRunningProcesses", ret)
 	}
-	procs := mergeProcessLists(graphics, compute)
+	procs, isCompute := mergeProcessLists(graphics, compute)
 
 	utilByPID, utilValid, err := p.processUtilization()
 	if err != nil {
@@ -264,6 +264,7 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 			PID:         proc.Pid,
 			UsedVRAMMiB: bytesToMiB(proc.UsedGpuMemory),
 			SMUtilValid: utilValid,
+			Compute:     isCompute[proc.Pid],
 		}
 		if utilValid {
 			// A process without a fresh sample was idle during the last
@@ -277,10 +278,15 @@ func (p *NvidiaProvider) GetGraphicsProcesses() ([]ProcessInfo, error) {
 
 // mergeProcessLists joins the graphics and compute lists. A process with both
 // contexts (NVML type C+G) appears in both lists and is kept once, with the
-// larger memory figure. Order is graphics first, then new compute PIDs.
-func mergeProcessLists(graphics, compute []nvml.ProcessInfo) []nvml.ProcessInfo {
+// larger memory figure. Order is graphics first, then new compute PIDs. The
+// returned set holds every PID found in the compute list.
+func mergeProcessLists(graphics, compute []nvml.ProcessInfo) ([]nvml.ProcessInfo, map[uint32]bool) {
 	out := make([]nvml.ProcessInfo, 0, len(graphics)+len(compute))
 	index := make(map[uint32]int, len(graphics)+len(compute))
+	isCompute := make(map[uint32]bool, len(compute))
+	for _, proc := range compute {
+		isCompute[proc.Pid] = true
+	}
 	for _, list := range [][]nvml.ProcessInfo{graphics, compute} {
 		for _, proc := range list {
 			if i, ok := index[proc.Pid]; ok {
@@ -293,7 +299,7 @@ func mergeProcessLists(graphics, compute []nvml.ProcessInfo) []nvml.ProcessInfo 
 			out = append(out, proc)
 		}
 	}
-	return out
+	return out, isCompute
 }
 
 // classifyUtilReturn maps an NVML GetProcessUtilization return code to the

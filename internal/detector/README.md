@@ -76,6 +76,7 @@ Default values (`DefaultConfig`):
 | `GPUMemThresholdMiB` | 1500 | In-use memory that triggers a pause together with `GPUMemRequiresUtilPct`. |
 | `GPUMemRequiresUtilPct` | 25 | Minimum utilization that must accompany high memory use. |
 | `SustainedTicksRequired` | 3 | Consecutive high-load ticks before declaring a pause. |
+| `ComputeMemThresholdMiB` | 256 | GPU memory a non-ignored compute process must hold to count as contending with FAH (see below). |
 | `CooldownTicksRequired` | 60 | Consecutive load-free ticks before folding resumes after a load pause (2 min at a 2 s tick). |
 
 The `NewEvaluator` constructor clamps invalid or overly aggressive values to
@@ -94,6 +95,32 @@ load tick restarts the count. The cooldown cannot be disabled, so it always
 lasts two to three minutes. It never delays `StatePausedBattery`: if the load is
 gone but the battery demands a pause during the cooldown, `StatePausedBattery`
 is returned.
+
+### Compute contention (Linux)
+
+The provider lists graphics **and** compute processes. CUDA work competes with
+the FAH core for SM time and loses: on CachyOS, Blender Cycles (OptiX) rendered
+at 0-20 % SM and 1424 MiB while FahCore held 61-98 %, so neither the 45 % rule
+nor the 1500 MiB rule could ever fire. A compute process (`ProcessInfo.Compute`)
+therefore also counts as load when it holds at least `ComputeMemThresholdMiB`
+(256 MiB) **and** had an SM sample above 0 within the last 5 ticks. The window
+absorbs NVML's sparse samples (10, 0, 0, 20, 0, 0, 0, 7, 10 %); the activity
+requirement keeps an idle app that keeps its CUDA context (Blender at rest:
+437 MiB, 0 %) from pausing folding. Once folding pauses, the app gets the GPU
+and its SM rises above the normal threshold. The FAH core is compute too and is
+removed by the ignore list.
+
+### User pause list (Linux)
+
+`LinuxCollector.SetPauseProcesses` takes patterns from `ParsePauseProcesses`
+(comma-separated, case-insensitive, trailing `*` for a prefix; at most 64
+patterns of 64 characters; `*` alone, paths and anything matching the FAH
+processes are rejected). Every tick it scans `/proc` once and reports matching
+processes, by `comm` or `basename(argv[0])`, in `UserPauseMatches`. While the
+list has a match, every tick counts as load regardless of GPU use: the pause
+starts after the usual sustain and folding resumes 2 minutes after the last
+match exits. The daemon exposes it as `-pause-processes "blender,obs"` until
+the M3 GUI and socket manage it. The macOS collector ignores it.
 
 ### Game sessions (detection layer 2, Linux)
 
