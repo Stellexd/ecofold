@@ -31,6 +31,19 @@ RuntimeDirectory=ecofold
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
 
+# The GUI socket, /run/ecofold/ecofold.sock, is for members of the "ecofold"
+# group. The daemon cannot hand files to that group itself: the bounding set
+# above has no CAP_CHOWN, and root is not a member. So these two commands run
+# with full privileges ("+") on every start, after systemd resets the
+# directory to root:root: the group gets the directory, and the setgid bit
+# makes the socket inherit the group when the daemon binds it. The daemon
+# then only verifies the result and opens the socket to the group (0660).
+# "-" ignores a failure: without the group the daemon still starts and keeps
+# the socket root-only (0600).
+# NOT yet verified on CachyOS (needs "groupadd ecofold"); see docs/PENDING.md.
+ExecStartPre=+-/usr/bin/chgrp ecofold /run/ecofold
+ExecStartPre=+-/usr/bin/chmod 2750 /run/ecofold
+
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

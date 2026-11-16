@@ -16,6 +16,7 @@ import (
 	"github.com/Stellexd/ecofold/internal/detector"
 	"github.com/Stellexd/ecofold/internal/fah"
 	"github.com/Stellexd/ecofold/internal/gpu"
+	"github.com/Stellexd/ecofold/internal/ipc"
 )
 
 const (
@@ -31,6 +32,9 @@ func main() {
 // daemon's deferred fail-safe always runs.
 func run() int {
 	def := daemon.DefaultConfig()
+	// No fallback path: without a default the socket stays off unless
+	// -socket-path is given.
+	defSocket, sockErr := ipc.DefaultPath()
 	var (
 		fahEndpoint = flag.String("fah-endpoint", fah.DefaultEndpoint, "Folding@home v8 WebSocket API (loopback only)")
 		fahMock     = flag.Bool("fah-mock", false, "use an in-memory FAH controller (development without Folding@home)")
@@ -40,6 +44,8 @@ func run() int {
 		restoreOnly = flag.Bool("restore-power-limit", false, "restore the default GPU power limit and exit (for systemd ExecStopPost)")
 		verbose     = flag.Bool("debug", false, "enable debug logging")
 		pauseList   = flag.String("pause-processes", "", "comma-separated process names that stop folding while they run, e.g. \"blender,obs\" (Linux; trailing * is a prefix match)")
+		socketPath  = flag.String("socket-path", defSocket, "Unix socket for the GUI; empty disables IPC")
+		socketGroup = socketGroupFlag()
 	)
 	flag.Parse()
 
@@ -68,6 +74,10 @@ func run() int {
 	}
 	if len(pause) > 0 && !pauseListSupported {
 		logger.Warn("-pause-processes is not supported on this platform; ignoring it", "patterns", pause)
+		pause = nil
+	}
+	if sockErr != nil && *socketPath == "" {
+		logger.Warn("no default socket path", "err", sockErr)
 	}
 
 	var ctrl fah.Controller
@@ -89,6 +99,7 @@ func run() int {
 	cfg.EcoWatts = *ecoWatts
 	cfg.RuntimeDir = *runtimeDir
 	cfg.StartupHoldTicks = detCfg.CooldownTicksRequired
+	cfg.PauseProcesses = pause
 	cfg.Logger = logger
 	if len(pause) > 0 {
 		logger.Info("pause list active", "patterns", pause)
@@ -97,7 +108,7 @@ func run() int {
 	d, err := daemon.New(cfg, daemon.Deps{
 		GPU:       provider,
 		FAH:       ctrl,
-		Collector: newCollector(provider, pause),
+		Collector: newCollector(provider),
 		Evaluator: detector.NewEvaluator(detCfg),
 	})
 	if err != nil {
@@ -109,7 +120,7 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := d.Run(ctx); err != nil {
+	if err := serve(ctx, logger, d, *socketPath, *socketGroup); err != nil {
 		logger.Error("daemon stopped with errors", "err", err)
 		return 1
 	}
