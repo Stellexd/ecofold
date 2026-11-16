@@ -18,8 +18,9 @@ Last updated: 2026-11-16 (M3 GUI on `feat/m3-gui`).
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
 3. M3 is written: the IPC backend is verified on CachyOS and the GUI is
-   implemented (`feat/m3-gui`). Next: try the GUI on both desktops (checklist
-   in section 3), then the security review of the socket.
+   implemented (`feat/m3-gui`). Next: fix the misleading GUI data (FAH status
+   and mock GPU data on macOS, section 3), try the GUI on both desktops
+   (checklist in section 3), then the security review of the socket.
 
 ## Road to v0.1.0
 
@@ -113,7 +114,7 @@ always stop folding.
   GUI ships settings.
 - [ ] The `fah` block of the status is what the daemon saw the last time it
   paused or resumed. A pause made in FAH's own UI does not show until then.
-  Add a slow periodic `GetStatus` if the GUI needs it.
+  Covered by "GUI shows misleading data" below (fix 1).
 - [ ] Pause list on macOS: `set_pause_processes` and `-pause-processes` are
   refused or ignored there (`unsupported`), because `DarwinCollector` reads
   ioreg only. It needs a per-process source before it can be supported.
@@ -147,6 +148,35 @@ always stop folding.
     power control hidden and the pause list disabled.
   - [ ] Against the real daemon: pause, resume (also during a game, to see
     the `game_active` message), eco limit and pause list.
+- [ ] **GUI shows misleading data** (seen on the real window on a MacBook Air
+  M4, 2026-11-16). Fix on `feat/m3-gui` in one commit:
+  `fix(gui,daemon): report real fah status and accurate macos gpu telemetry`.
+  - [ ] **1. Real FAH status.** The daemon only updates `fahStatus` on
+    `Pause`/`Resume`, so a daemon that starts in `folding` or `folding_eco`
+    shows "Folding@home: not checked yet" forever. In `internal/daemon`, call
+    `fah.GetStatus` in `start` and refresh it in the loop (every 5 ticks /
+    10 s, or every tick while there is no recent error). Add `State string`
+    (`folding`, `paused`, `idle`, `unknown`) and `ActiveProjectID int` to
+    `daemon.FAHStatus` and `gui.Status.FAH`. In `internal/gui/view.go`
+    (`FAHLabel`, `Headline`/`ModeLabel`): `!Reachable` shows
+    "Folding@home: not reachable (is the client running?)" and the headline
+    must not claim folding; folding with a project shows
+    "Folding@home: running (project #<id>)"; idle shows
+    "Folding@home: idle (waiting for work unit)".
+  - [ ] **2. No mock GPU data on macOS.** The "GPU and power" section shows
+    "Mock NVIDIA GeForce RTX 5060 (Apple Silicon Dev Mode)" and
+    "Drawing 75 W · 42 °C · VRAM 512 / 8192 MiB" next to the Mac's real
+    battery. Carry the real ioreg (`IOAccelerator`) data from
+    `DarwinCollector` through `SystemSnapshot` and `daemon.Status`: GPU name
+    (e.g. `Apple M4` if ioreg has it, otherwise `GPUClass` such as
+    `AGXAcceleratorG16G`), `GPUDeviceUtilPct` and `GPUInUseMemMiB`. In
+    `cmd/ecofold-gui/panel.go` and `internal/gui/view.go`, when
+    `PowerCapable == false` show no watts, temperature or VRAM total; show
+    "GPU utilization: X % · In-use memory: Y MiB" instead.
+  - [ ] **3. Tests and checks.** Update the tests in `internal/daemon`,
+    `internal/gui` and `cmd/ecofold-gui` for the new `FAHStatus` fields and
+    the macOS usage line. Run `gofmt -l .`, `go vet ./...`,
+    `go test -race ./...` and `make build`.
 - [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
   with an XDG autostart entry / a LaunchAgent), an application icon and
   bundle for macOS, and the Folding@home project details in the panel.
