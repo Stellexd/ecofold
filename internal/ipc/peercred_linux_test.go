@@ -187,9 +187,10 @@ func TestMissingSocketGroupFailsClosed(t *testing.T) {
 	}
 }
 
-// TestSetgidDirKeepsItsGroup mirrors the systemd unit: the directory already
-// belongs to the socket group and is setgid, so the socket inherits the
-// group. Listen must keep the bit and open the socket to the group.
+// TestSetgidDirKeepsItsGroup covers a directory an administrator prepared:
+// it already belongs to the socket group and is setgid, so the socket
+// inherits the group. Listen must keep the bit and open the socket to the
+// group.
 func TestSetgidDirKeepsItsGroup(t *testing.T) {
 	// A supplementary group, so inheritance and not the process's own gid
 	// explains the result.

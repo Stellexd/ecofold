@@ -48,19 +48,16 @@ GUI's channel.
 
 ### Group ownership under systemd
 
-The unit keeps `CapabilityBoundingSet=CAP_SYS_ADMIN`, so the daemon has no
-`CAP_CHOWN` and cannot give a file to a group root is not a member of. The
-unit therefore runs two privileged commands before the daemon starts:
+systemd creates `/run/ecofold` as `root:root 0750` and resets it on every
+start, so the daemon itself gives the directory and the socket to the group
+each time it starts. Root is not a member of `ecofold`, so this needs
+`CAP_CHOWN`; the unit's bounding set is `CAP_SYS_ADMIN CAP_CHOWN`.
 
-```
-ExecStartPre=+-/usr/bin/chgrp ecofold /run/ecofold
-ExecStartPre=+-/usr/bin/chmod 2750 /run/ecofold
-```
+Doing it from `ExecStartPre=+chgrp ...` does not work: systemd applies the
+`RuntimeDirectory` owner and mode again before `ExecStart`, and the change is
+lost (seen on CachyOS on 2026-11-16).
 
-The setgid bit makes the socket inherit the group when the daemon binds it.
-The daemon checks the result: if the directory or the socket does not belong
-to the group, it tries `chown` itself (this works with full root, for example
-`sudo make run-daemon`) and otherwise falls back to `0600`.
+If the `chown` fails, the daemon logs a warning and the socket stays `0600`.
 
 Create the group and add the desktop user once:
 

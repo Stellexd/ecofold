@@ -206,8 +206,8 @@ func prepareDir(dir string, gid uint32, hasGroup bool, log *slog.Logger) error {
 		}
 	}
 	if fi.Mode().Perm() != dirMode {
-		// Keep a setgid bit: the systemd unit sets it so the socket inherits
-		// the group without CAP_CHOWN.
+		// Keep a setgid bit an administrator set: with it the socket
+		// inherits the directory's group.
 		if err := os.Chmod(dir, dirMode|fi.Mode()&os.ModeSetgid); err != nil {
 			return fmt.Errorf("ipc: socket directory: %w", err)
 		}
