@@ -7,9 +7,8 @@ The package imports only the standard library and `golang.org/x/sys`. It does
 not import `internal/daemon`: the daemon plugs in through `ipc.Handler`, and
 the adapter lives in `cmd/ecofold-daemon/ipc.go`.
 
-Status: implemented and tested on macOS and, unprivileged, on CachyOS. The
-root, group and systemd checks are still pending on CachyOS; see
-`docs/PENDING.md`.
+Status: implemented, tested on macOS and verified on CachyOS as root under
+the systemd unit (2026-11-16; results in `docs/SECURITY_AUDIT.md`, NV-1).
 
 ## Socket
 
