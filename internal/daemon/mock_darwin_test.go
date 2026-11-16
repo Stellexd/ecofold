@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -69,5 +70,38 @@ func TestDaemonWithRealMocks(t *testing.T) {
 	}
 	if countLines(logs.String(), "level=ERROR") != 0 {
 		t.Fatalf("errores registrados con mocks:\n%s", logs.String())
+	}
+}
+
+// TestDarwinCollectorHasNoPauseList pins the macOS contract: the collector
+// cannot see processes, so set_pause_processes is refused, not accepted and
+// ignored.
+func TestDarwinCollectorHasNoPauseList(t *testing.T) {
+	col := detector.NewDarwinCollector()
+	if _, ok := any(col).(PauseListSetter); ok {
+		t.Fatal("DarwinCollector no debe implementar PauseListSetter")
+	}
+
+	cfg := DefaultConfig()
+	cfg.RuntimeDir = t.TempDir()
+	cfg.Logger = slog.New(slog.NewTextHandler(&syncBuffer{}, nil))
+	d, err := New(cfg, Deps{
+		GPU:       gpu.NewProvider(),
+		FAH:       fah.NewMockController(18264),
+		Collector: col,
+		Evaluator: detector.NewEvaluator(detector.DefaultConfig()),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := d.start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	err = d.exec(context.Background(), &command{kind: cmdSetPauseProcesses, patterns: []string{"blender"}})
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("err = %v, se esperaba ErrUnsupported", err)
+	}
+	if st := d.publish(); len(st.PauseProcesses) != 0 {
+		t.Fatalf("la lista rechazada aparece en el status: %v", st.PauseProcesses)
 	}
 }

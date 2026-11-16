@@ -28,6 +28,10 @@ var ErrBatteryVanished = errors.New("detector: battery vanished after it was see
 //
 // DarwinCollector is not safe for concurrent use by multiple goroutines; each
 // daemon tick creates one snapshot at a time.
+//
+// It has no SetPauseProcesses on purpose: ioreg has no per-process view, so a
+// pause list could never match. Without the method the daemon answers
+// "unsupported" instead of accepting a list that does nothing.
 type DarwinCollector struct {
 	// fetch is the ioreg seam. Production uses FetchIORegContext.
 	fetch func(ctx context.Context, class string) ([]byte, error)

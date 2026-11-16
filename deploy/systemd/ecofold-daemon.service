@@ -21,7 +21,13 @@ TimeoutStopSec=10
 # and keep the capability bounding set and the sandbox below as the limit.
 User=root
 Group=root
-CapabilityBoundingSet=CAP_SYS_ADMIN
+# CAP_CHOWN is for the GUI socket only: on every start the daemon gives
+# /run/ecofold and /run/ecofold/ecofold.sock to the "ecofold" group, which
+# root is not a member of. Without the group the daemon still starts and keeps
+# the socket root-only (0600). Changing the directory from ExecStartPre does
+# not work: systemd resets it to root:root 0750 before ExecStart (seen on
+# CachyOS, 2026-11-16).
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_CHOWN
 NoNewPrivileges=yes
 
 # Holds the pause-ownership marker. "yes" keeps it across stop/start too (a

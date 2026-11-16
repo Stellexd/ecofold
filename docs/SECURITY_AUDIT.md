@@ -40,6 +40,44 @@ These leads are grounded in source or design documents but cannot be demonstrate
 
 Fingerprint: `ecofold:ipc:planned-tmp-socket-root-daemon`
 
+**Status (2026-11-16): Fixed and verified on Linux.** Fixed in `5f165b9`
+(socket and peer credentials), `de35037` (daemon integration) and `933170e`
+(systemd unit); verified on CachyOS at `933170e`. The text below the tables
+describes the design as audited on 2026-11-10.
+
+| Recommendation | State |
+| --- | --- |
+| 1. No `/tmp` socket | Done. Linux: `/run/ecofold/ecofold.sock`. macOS: `os.UserCacheDir()`. There is no fallback path. |
+| 2. Root-owned `0750` directory, socket `0660`, group `ecofold` | Done. A stale socket is replaced only after `lstat` shows a socket nobody listens on; a symlink or any other file is refused. Without the group the socket is `0600`. |
+| 3. Peer credentials on every connection | Done: `SO_PEERCRED` (Linux), `LOCAL_PEERCRED` (macOS), checked on accept before reading. |
+| 4. Watt validation in the daemon | Done: `set_eco_watts` rejects values outside the NVML constraints (`out_of_range`), and `SetPowerLimit` keeps its own range check. |
+| 5. Align the documents | `docs/ARCHITECTURE.md` and `internal/ipc/README.md` done. The local `privilege-ipc-boundary` skill (gitignored) still mentions `/tmp/ecofold.sock` for development. |
+
+Verification on CachyOS (2026-11-16, kernel 7.3.3, RTX 5060, real FAH client,
+daemon running as root under the systemd unit):
+
+| Check | Result |
+| --- | --- |
+| `go test -race ./...` with `CGO_ENABLED=1`, normal user | Pass |
+| `internal/ipc` tests as root (race build) | 34 pass, 1 skipped (needs a supplementary group) |
+| `/run/ecofold` and the socket after start, and after a stop and start | `root:ecofold 750` and `root:ecofold 660` |
+| Member of `ecofold`: `status`, `force_pause`, `force_resume`, `set_pause_processes` | Pass. Under the manual pause the real limit was 145 W and FAH was paused; `force_resume` applied 123 W, then resumed FAH. |
+| `set_eco_watts` | 130 W changed the real limit (`nvidia-smi`: 130 W) and 123 W restored it; 500, 122 and 120 W were refused with `out_of_range` (device range 123-145 W) and the limit did not move. |
+| `nobody`, normal file modes | `connect`: permission denied |
+| `nobody`, with the directory and socket opened to everyone for the test | Connection closed with no response; journal: `peer not authorized ... uid=65534`; the `force_pause` it sent had no effect |
+| `systemctl stop` | Socket removed, limit 145 W |
+
+Found during this verification: the first unit tried to hand the directory to
+the group from `ExecStartPre`. It had no effect, the daemon could not `chown`
+without `CAP_CHOWN`, and the socket fell back to `root:root 0600`: closed to
+everyone, as designed, but unusable. `933170e` adds `CAP_CHOWN` to the unit's
+bounding set and removes those lines. `SocketMode`/`SocketGroup` are not used
+because they only apply to socket-activated units.
+
+Not verified: a start under systemd with the `ecofold` group missing (covered
+only by a unit test), and the full security review of the socket, both in
+`docs/PENDING.md`.
+
 **Trace**
 
 | Kind | Location | Description |

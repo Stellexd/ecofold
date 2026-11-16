@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Stellexd/ecofold/internal/detector"
@@ -46,6 +48,9 @@ const (
 	// utilization unsupported): the default power limit is kept and FAH is
 	// left as it is.
 	ModeDegraded Mode = "degraded"
+	// ModePausedManual means a ForcePause is in effect and the evaluator
+	// would otherwise fold.
+	ModePausedManual Mode = "paused_manual"
 )
 
 // collectErrLogEvery rate-limits warnings during a long Collect outage: the
@@ -70,6 +75,10 @@ type Config struct {
 	// capped nor has folding resumed under it before a full cooldown. It
 	// should match detector.Config.CooldownTicksRequired. Default: 60.
 	StartupHoldTicks int
+	// PauseProcesses is the initial pause list, already validated with
+	// detector.ParsePauseProcesses. It is handed to the collector at startup
+	// when the collector is a PauseListSetter.
+	PauseProcesses []string
 
 	// CollectTimeout bounds one Collect call. Default: 1.5 s.
 	CollectTimeout time.Duration
@@ -119,8 +128,10 @@ const (
 	opResume
 )
 
-// Daemon is the control loop. Its state is owned by the loop goroutine; it
-// is not safe for concurrent use.
+// Daemon is the control loop. Its state is owned by the loop goroutine and
+// is not locked. Other goroutines may only call Status and the command
+// methods (ForcePause, ForceResume, SetEcoWatts, SetPauseProcesses), which
+// read a published snapshot or hand a command to the loop.
 type Daemon struct {
 	cfg       Config
 	log       *slog.Logger
@@ -130,9 +141,18 @@ type Daemon struct {
 	eval      Evaluator
 	marker    marker
 
+	// cmds carries commands to the loop; stopping is closed when Run begins
+	// to shut down; status is the snapshot other goroutines read.
+	cmds     chan *command
+	stopping chan struct{}
+	stopOnce sync.Once
+	status   atomic.Pointer[Status]
+
 	// powerCapable is set by start and read-only afterwards, so the
 	// fail-safe can read it even if the loop goroutine is still running.
 	powerCapable bool
+	// Power limit constraints read by start.
+	minW, maxW, defaultW int
 
 	mode         Mode
 	lastDecision detector.OperatingState
@@ -147,6 +167,16 @@ type Daemon struct {
 	collectErrs  int
 	fahErrs      int
 	resumeHold   int // evaluated ticks left before an inherited pause may resume
+	manual       Override
+
+	// Last known values, kept only for Status.
+	pauseProcesses []string
+	powerLimitW    int
+	gpuStatus      GPUStatus
+	battery        BatteryStatus
+	fahStatus      FAHStatus
+	sessions       []string
+	pauseMatches   []string
 }
 
 // New validates cfg and deps and returns a Daemon. It does not touch the
@@ -188,7 +218,10 @@ func New(cfg Config, deps Deps) (*Daemon, error) {
 		collector: deps.Collector,
 		eval:      deps.Evaluator,
 		marker:    marker{dir: cfg.RuntimeDir},
+		cmds:      make(chan *command, cmdQueue),
+		stopping:  make(chan struct{}),
 		mode:      ModeStarting,
+		manual:    OverrideNone,
 	}, nil
 }
 
@@ -197,6 +230,9 @@ func New(cfg Config, deps Deps) (*Daemon, error) {
 // close FAH and shut the GPU down. FAH is never resumed on exit; the pause
 // marker is kept so the next start decides from the current load.
 func (d *Daemon) Run(ctx context.Context) error {
+	// Commands fail with ErrStopping from the moment shutdown begins, and
+	// after any return.
+	defer d.markStopping()
 	if err := d.start(); err != nil {
 		return err
 	}
@@ -209,6 +245,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	select {
 	case loopErr = <-done:
 	case <-ctx.Done():
+		d.markStopping()
 		d.log.Info("stopping")
 		select {
 		case loopErr = <-done:
@@ -218,7 +255,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 			d.log.Error("control loop did not stop in time; forcing fail-safe", "grace", d.cfg.ShutdownGrace)
 		}
 	}
+	d.markStopping()
 	return errors.Join(loopErr, d.failSafe(hung))
+}
+
+func (d *Daemon) markStopping() {
+	d.stopOnce.Do(func() { close(d.stopping) })
 }
 
 // start initializes the GPU and loads persisted state.
@@ -239,6 +281,7 @@ func (d *Daemon) start() error {
 		d.powerCapable = false
 	}
 	d.powerEnabled = d.powerCapable
+	d.minW, d.maxW, d.defaultW = tel.MinPowerLimitW, tel.MaxPowerLimitW, tel.DefaultPowerLimitW
 	if d.powerCapable {
 		d.ecoWatts = min(max(d.cfg.EcoWatts, tel.MinPowerLimitW), tel.MaxPowerLimitW)
 		if d.ecoWatts != d.cfg.EcoWatts {
@@ -268,6 +311,16 @@ func (d *Daemon) start() error {
 		d.resumeHold = d.cfg.StartupHoldTicks
 	}
 
+	if len(d.cfg.PauseProcesses) > 0 {
+		if setter, ok := d.collector.(PauseListSetter); ok {
+			d.pauseProcesses = append([]string(nil), d.cfg.PauseProcesses...)
+			setter.SetPauseProcesses(d.pauseProcesses)
+		} else {
+			d.log.Warn("this collector has no pause list; ignoring it", "patterns", d.cfg.PauseProcesses)
+		}
+	}
+	d.publish()
+
 	d.log.Info("daemon started",
 		"gpu", tel.Name,
 		"power_limit_supported", d.powerCapable,
@@ -277,8 +330,8 @@ func (d *Daemon) start() error {
 	return nil
 }
 
-// loop ticks until ctx is canceled. A panic is converted into an error so Run
-// still runs the fail-safe.
+// loop ticks until ctx is canceled and runs commands between ticks. A panic
+// is converted into an error so Run still runs the fail-safe.
 func (d *Daemon) loop(ctx context.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -294,10 +347,20 @@ func (d *Daemon) loop(ctx context.Context) (err error) {
 			return nil
 		}
 		d.tick(ctx)
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-t.C:
+		d.publish()
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-t.C:
+				break wait
+			case c := <-d.cmds:
+				if ctx.Err() != nil {
+					return nil
+				}
+				d.handle(ctx, c)
+			}
 		}
 	}
 }
@@ -332,6 +395,13 @@ func (d *Daemon) tick(ctx context.Context) {
 		d.log.Info("collect recovered", "after_errors", d.collectErrs)
 		d.collectErrs = 0
 	}
+	d.battery = BatteryStatus{
+		Present:  snap.HasBattery,
+		OnAC:     snap.OnAC,
+		Charging: snap.IsCharging,
+		Pct:      snap.BatteryPct,
+	}
+	d.sessions, d.pauseMatches = snap.LiveGameSessions, snap.UserPauseMatches
 
 	d.apply(ctx, d.eval.Evaluate(snap))
 }
@@ -356,6 +426,12 @@ func (d *Daemon) apply(ctx context.Context, decision detector.OperatingState) {
 		if !prevPause {
 			d.claimPause(ctx)
 		}
+	} else if d.manual == OverridePause {
+		// The user's pause outranks the evaluator: nothing resumes, the GPU
+		// keeps its default limit and a pause FAH has not confirmed yet stays
+		// pending.
+		d.mode = ModePausedManual
+		d.restoreIfCapped()
 	} else {
 		if d.pending == opPause {
 			d.pending = opNone // the pause never landed; there is nothing to resume
@@ -377,9 +453,7 @@ func (d *Daemon) apply(ctx context.Context, decision detector.OperatingState) {
 // alone (CH-10). Any other status, including idle, unknown or unreadable,
 // gets a Pause (CH2-H1).
 func (d *Daemon) claimPause(ctx context.Context) {
-	sctx, cancel := context.WithTimeout(ctx, d.cfg.StatusTimeout)
-	st, err := d.fah.GetStatus(sctx)
-	cancel()
+	st, err := d.readFAH(ctx)
 	if err == nil && st.Paused {
 		d.pending = opNone
 		if !d.pausedByUs {
@@ -454,7 +528,9 @@ func (d *Daemon) runPending(ctx context.Context) {
 	if d.pending == opResume {
 		op, call = "resume", d.fah.Resume
 	}
-	if err := call(actx); err != nil {
+	err := call(actx)
+	d.observeFAH(op == "pause", err)
+	if err != nil {
 		d.fahErrs++
 		if d.fahErrs == 1 || d.fahErrs%collectErrLogEvery == 0 {
 			d.log.Warn("fah action failed; retrying next tick", "op", op, "err", err, "consecutive", d.fahErrs)

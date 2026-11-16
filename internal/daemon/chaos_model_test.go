@@ -78,10 +78,13 @@ type modelFAH struct {
 
 	// Filled by the daemon calls, checked by the harness.
 	resumeWhileUserPaused bool
-	resumeLimit           []int
-	pauseCalls            int
-	resumeCalls           int
-	gpu                   *modelGPU
+	// resumeConsent is set while a force_resume runs: the one case where
+	// resuming a user pause is allowed.
+	resumeConsent bool
+	resumeLimit   []int
+	pauseCalls    int
+	resumeCalls   int
+	gpu           *modelGPU
 }
 
 func (f *modelFAH) GetStatus(ctx context.Context) (fah.Status, error) {
@@ -118,7 +121,7 @@ func (f *modelFAH) Resume(ctx context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.resumeCalls++
-	if f.pausedBy == "user" {
+	if f.pausedBy == "user" && !f.resumeConsent {
 		f.resumeWhileUserPaused = true
 	}
 	f.gpu.mu.Lock()
@@ -192,6 +195,7 @@ func (r *chaosRun) restart(clean bool) {
 
 func (r *chaosRun) tick(snap detector.SystemSnapshot, err error) {
 	inherited := r.d.resumeHold > 0 && r.d.pausedByUs && !r.d.degraded
+	manual := r.d.manual == OverridePause
 	r.gpu.mu.Lock()
 	opsBefore := len(r.gpu.ops)
 	r.gpu.mu.Unlock()
@@ -201,6 +205,16 @@ func (r *chaosRun) tick(snap detector.SystemSnapshot, err error) {
 
 	r.col.set(snap, err)
 	r.d.tick(context.Background())
+
+	if manual {
+		r.fah.mu.Lock()
+		resumed := r.fah.resumeCalls > resumesBefore
+		r.fah.mu.Unlock()
+		// I9: no tick resumes folding under a manual pause.
+		if resumed {
+			r.t.Fatalf("I9: Resume en un tick con la pausa manual activa")
+		}
+	}
 
 	if inherited {
 		r.gpu.mu.Lock()
@@ -258,6 +272,11 @@ func (r *chaosRun) checkTick() {
 	if d.haveDecision && isPause(d.lastDecision) && limit != modelDefaultW && !lastRestoreFailed && d.collectErrs == 0 {
 		r.t.Fatalf("I4: decisión %s con el límite en %d W", d.lastDecision, limit)
 	}
+	// I10: under a manual pause the GPU is at the default limit, with the
+	// same allowance as I4.
+	if d.manual == OverridePause && limit != modelDefaultW && !lastRestoreFailed && d.collectErrs == 0 {
+		r.t.Fatalf("I10: pausa manual con el límite en %d W", limit)
+	}
 	// I5: ownership in memory matches the marker on disk.
 	present, err := d.marker.present()
 	if err != nil {
@@ -266,6 +285,32 @@ func (r *chaosRun) checkTick() {
 	if present != d.pausedByUs {
 		r.t.Fatalf("I5: marcador en disco=%v, pausedByUs=%v", present, d.pausedByUs)
 	}
+}
+
+// command runs a manual command between ticks, as the loop does, and checks
+// the invariants. A force_resume may resume a user pause (the documented
+// exception to I1), but only during the command itself.
+func (r *chaosRun) command(kind cmdKind) {
+	r.t.Helper()
+	r.fah.mu.Lock()
+	r.fah.resumeConsent = kind == cmdForceResume
+	r.fah.mu.Unlock()
+
+	err := r.d.exec(context.Background(), &command{kind: kind})
+
+	r.fah.mu.Lock()
+	r.fah.resumeConsent = false
+	pausedBy := r.fah.pausedBy
+	r.fah.mu.Unlock()
+	switch {
+	case kind == cmdForcePause && err == nil && pausedBy == "":
+		r.t.Fatalf("I11: force_pause sin error pero FAH sigue plegando")
+	case kind == cmdForceResume && err == nil && pausedBy != "":
+		r.t.Fatalf("I11: force_resume sin error pero FAH sigue en pausa (%s)", pausedBy)
+	case kind == cmdForceResume && r.d.manual != OverrideNone:
+		r.t.Fatalf("I11: force_resume dejó la pausa manual activa")
+	}
+	r.checkTick()
 }
 
 // checkExit asserts the fail-safe left the GPU at the default limit.
@@ -336,7 +381,14 @@ func (r *chaosRun) step(b byte) {
 	case 14:
 		r.restart(b&0x10 != 0)
 	case 15:
-		r.tick(snapLoad, nil)
+		switch b >> 4 {
+		case 0x0c, 0x0d:
+			r.command(cmdForcePause)
+		case 0x0e, 0x0f:
+			r.command(cmdForceResume)
+		default:
+			r.tick(snapLoad, nil)
+		}
 	}
 }
 
@@ -406,6 +458,9 @@ func FuzzDaemonInvariants(f *testing.F) {
 	f.Add([]byte{0x0c, 0x07, 0x00, 0x0c, 0x0e, 0x07})             // restore failures + crash
 	f.Add([]byte{0x24, 0x24, 0xfa, 0xf0, 0x07, 0x00})             // Degraded while paused
 	f.Add([]byte{0x1a, 0x1a, 0x1a, 0xea, 0x0e, 0x0a, 0xf0})       // game session, crash in the menu
+	f.Add([]byte{0x00, 0xcf, 0xf0, 0xf0, 0xef, 0x00})             // manual pause → resume
+	f.Add([]byte{0x0d, 0xcf, 0x0b, 0xef, 0x0d, 0x0d, 0x0b, 0xf0}) // manual resume of a user pause, FAH down
+	f.Add([]byte{0x24, 0x24, 0xcf, 0xf0, 0xf0, 0x1c, 0xef, 0x00}) // manual pause over a game, cap failure
 	f.Fuzz(func(t *testing.T, events []byte) {
 		if len(events) > 512 {
 			events = events[:512]

@@ -6,7 +6,7 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-14 (end of session: steps 1-2 archived).
+Last updated: 2026-11-16 (M3 IPC backend on `feat/m3-ipc-socket`).
 
 ## Next session
 
@@ -17,8 +17,8 @@ Last updated: 2026-11-14 (end of session: steps 1-2 archived).
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. Start M3: upgrade `go.mod` and the Mac to Go 1.27.4 (CachyOS is already on
-   it), then the socket.
+3. M3 backend is written and verified on CachyOS (`feat/m3-ipc-socket`):
+   next the security review of the socket, then the GUI.
 
 ## Road to v0.1.0
 
@@ -90,14 +90,38 @@ always stop folding.
 
 ### 3. M3 (issue #3): IPC and GUI
 
-- [ ] Upgrade both machines and `go.mod` to Go 1.27.4 (GO-2026-6859) before any
-  socket exists.
-- [ ] Unix domain socket with restrictive permissions (owner/group only) and a
+- [x] Upgrade both machines and `go.mod` to Go 1.27.4 (GO-2026-6859) before any
+  socket exists. `go.mod` says `go 1.27.4`; the Mac's local toolchain is
+  still 1.27.3 and downloads 1.27.4 through `GOTOOLCHAIN=auto`.
+- [x] Unix domain socket with restrictive permissions (owner/group only) and a
   minimal protocol: status, force pause/resume, read/update config.
+  `internal/ipc` plus the command channel in `internal/daemon`; protocol in
+  `internal/ipc/README.md`. Backend only, no GUI yet.
+- [x] Verify the IPC backend on CachyOS (2026-11-16, commit `933170e`,
+  results in `SECURITY_AUDIT.md` NV-1): tests as the normal user and as
+  root, socket `root:ecofold 660` in `root:ecofold 750` under the unit, every
+  command against the real NVML and FAH, an unauthorized uid refused with no
+  response, and `systemctl stop` removing the socket and restoring 145 W. The
+  unit needed `CAP_CHOWN`; the `ExecStartPre` approach did not work.
+- [ ] Start the unit without the `ecofold` group (`groupdel ecofold`): it must
+  still start, log `socket group not found` and leave the socket `0600`. Only
+  a unit test covers this today.
+- [ ] IPC changes are not persisted: `set_eco_watts`, `set_pause_processes`
+  and the manual pause are lost when the daemon restarts (the flags apply
+  again). Decide where a config file lives and who may write it before the
+  GUI ships settings.
+- [ ] The `fah` block of the status is what the daemon saw the last time it
+  paused or resumed. A pause made in FAH's own UI does not show until then.
+  Add a slow periodic `GetStatus` if the GUI needs it.
+- [ ] Pause list on macOS: `set_pause_processes` and `-pause-processes` are
+  refused or ignored there (`unsupported`), because `DarwinCollector` reads
+  ioreg only. It needs a per-process source before it can be supported.
 - [ ] Security review of the socket before merging (new attack surface). The
   daemon runs as root, so a socket bug is a root bug: socket `0660` with an
   `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts
-  against the NVML constraints.
+  against the NVML constraints. All four are implemented (NV-1 in
+  `SECURITY_AUDIT.md`); the review itself, with the `security-audit` skill in
+  the `standard` profile, has not been done.
 - [ ] Harden the unit further (`SystemCallFilter=@system-service`,
   `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
   re-check that NVML and cgo still work on CachyOS.
@@ -155,10 +179,12 @@ always stop folding.
 
 - [ ] Publish the FAH container on `127.0.0.1:7396:7396` instead of
   `0.0.0.0:7396`: today any host on the LAN can pause or reconfigure FAH.
-- [ ] CachyOS test machine: the installed `/usr/bin/ecofold-daemon` is a manual
-  build of `fix/m2-compute-processes` (same code as `develop` after PR #21);
-  reinstall with `~/.cache/ecofold-verify/reinstall.sh` after daemon changes
-  until the AUR package exists. The legacy `autofold.service` (user unit) is
+- [ ] CachyOS test machine: the installed `/usr/bin/ecofold-daemon` and its
+  unit are a manual build of `feat/m3-ipc-socket` at `933170e`, and the
+  `ecofold` group exists with the desktop user in it. Reinstall with
+  `sudo bash ~/.cache/ecofold-verify/m3/m3-verify.sh` (it also reruns the IPC
+  checks) after daemon changes until the AUR package exists; the AUR package
+  must create the group (`sysusers.d`). The legacy `autofold.service` (user unit) is
   disabled. The old local branch `test/m1-nvml-integration` in
   `~/Documents/GitHub/ecofoldGPU` only holds a commit already applied on
   `develop`; delete it with `git branch -D` when convenient.
