@@ -40,6 +40,27 @@ These leads are grounded in source or design documents but cannot be demonstrate
 
 Fingerprint: `ecofold:ipc:planned-tmp-socket-root-daemon`
 
+**Status (2026-11-16): Fixed in `5f165b9` (socket and peer credentials) and
+`de35037` (daemon integration and systemd unit), pending Linux
+verification.** The text below describes the design as audited on 2026-11-10.
+
+| Recommendation | State |
+| --- | --- |
+| 1. No `/tmp` socket | Done. Linux: `/run/ecofold/ecofold.sock`. macOS: `os.UserCacheDir()`. There is no fallback path. |
+| 2. Root-owned `0750` directory, socket `0660`, group `ecofold` | Done in code and in the unit. A stale socket is replaced only after `lstat` shows a socket nobody listens on; a symlink or any other file is refused. Without the group the socket is `0600`. |
+| 3. Peer credentials on every connection | Done: `SO_PEERCRED` (Linux), `LOCAL_PEERCRED` (macOS), checked on accept before reading. |
+| 4. Watt validation in the daemon | Done: `set_eco_watts` rejects values outside the NVML constraints (`out_of_range`), and `SetPowerLimit` keeps its own range check. |
+| 5. Align the documents | `docs/ARCHITECTURE.md` and `internal/ipc/README.md` done. The local `privilege-ipc-boundary` skill (gitignored) still mentions `/tmp/ecofold.sock` for development. |
+
+Verified so far: `go test -race ./...` on macOS, and on CachyOS with
+`CGO_ENABLED=1` as an unprivileged user (peer credentials, socket group and
+setgid directory with the user's own groups). Not yet verified, tracked in
+`docs/PENDING.md`: the daemon as root under the systemd unit, a connection
+from an unauthorized uid, and the `ecofold` group on a real install. The
+"bounded local next step" below is that test. The unit uses
+`RuntimeDirectory` plus two `ExecStartPre` commands instead of
+`SocketMode`/`SocketGroup`, which only apply to socket-activated units.
+
 **Trace**
 
 | Kind | Location | Description |

@@ -6,7 +6,7 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-14 (end of session: steps 1-2 archived).
+Last updated: 2026-11-16 (M3 IPC backend on `feat/m3-ipc-socket`).
 
 ## Next session
 
@@ -17,8 +17,8 @@ Last updated: 2026-11-14 (end of session: steps 1-2 archived).
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. Start M3: upgrade `go.mod` and the Mac to Go 1.27.4 (CachyOS is already on
-   it), then the socket.
+3. M3 backend is written (`feat/m3-ipc-socket`): verify it on CachyOS with
+   the checklist in section 3, then the security review, then the GUI.
 
 ## Road to v0.1.0
 
@@ -90,14 +90,60 @@ always stop folding.
 
 ### 3. M3 (issue #3): IPC and GUI
 
-- [ ] Upgrade both machines and `go.mod` to Go 1.27.4 (GO-2026-6859) before any
-  socket exists.
-- [ ] Unix domain socket with restrictive permissions (owner/group only) and a
+- [x] Upgrade both machines and `go.mod` to Go 1.27.4 (GO-2026-6859) before any
+  socket exists. `go.mod` says `go 1.27.4`; the Mac's local toolchain is
+  still 1.27.3 and downloads 1.27.4 through `GOTOOLCHAIN=auto`.
+- [x] Unix domain socket with restrictive permissions (owner/group only) and a
   minimal protocol: status, force pause/resume, read/update config.
+  `internal/ipc` plus the command channel in `internal/daemon`; protocol in
+  `internal/ipc/README.md`. Backend only, no GUI yet.
+- [ ] **Verify the IPC backend on CachyOS** (it was written on macOS; on
+  CachyOS only the unprivileged tests ran):
+  - [x] `CGO_ENABLED=1 go test -race ./...` as the normal user (2026-11-16,
+    from a copy of the tree in `~/.cache/ecofold-verify/m3-ipc`). Repeat from
+    the branch checkout.
+  - [ ] `sudo groupadd --system ecofold`, `sudo gpasswd -a "$USER" ecofold`,
+    log in again, reinstall the daemon and the unit
+    (`systemctl daemon-reload`).
+  - [ ] Under the unit: `/run/ecofold` is `root:ecofold` mode `2750` and the
+    socket is `root:ecofold` mode `0660`. This depends on the two new
+    `ExecStartPre=+-` lines and on the setgid bit surviving, with no
+    `CAP_CHOWN` or `CAP_FSETID` in the bounding set. Neither has run on a
+    real system yet. If it fails, the daemon logs
+    `could not give the socket to the socket group` and the socket stays
+    `0600`.
+  - [ ] Without the group (`groupdel ecofold`): the unit still starts, the log
+    has `socket group not found` and the socket is `0600`.
+  - [ ] A group member gets a status
+    (`printf '{"v":1,"id":"1","cmd":"status"}\n' | nc -U /run/ecofold/ecofold.sock`).
+    An unauthorized uid does not: `sudo -u nobody` gets "permission denied"
+    from the file mode. To reach the peer-credential check, run the daemon by
+    hand with `-socket-path` in a scratch directory and, once it is up,
+    `chmod 755` that directory and `chmod 666` the socket: the connection
+    must close with no response and the log must show `peer not authorized`
+    with the uid.
+  - [ ] As root: `go test -race ./internal/ipc/`, which runs the directory
+    owner and `chown` paths as uid 0.
+  - [ ] On hardware: `set_eco_watts` changes the real limit (`nvidia-smi`),
+    out-of-range values are refused, `force_pause`/`force_resume` drive the
+    real FAH client, and `systemctl stop` removes the socket and restores
+    145 W.
+- [ ] IPC changes are not persisted: `set_eco_watts`, `set_pause_processes`
+  and the manual pause are lost when the daemon restarts (the flags apply
+  again). Decide where a config file lives and who may write it before the
+  GUI ships settings.
+- [ ] The `fah` block of the status is what the daemon saw the last time it
+  paused or resumed. A pause made in FAH's own UI does not show until then.
+  Add a slow periodic `GetStatus` if the GUI needs it.
+- [ ] On macOS `set_pause_processes` is accepted but has no effect:
+  `DarwinCollector` stores the list and cannot match processes. Either
+  implement matching or make the command answer `unsupported` there.
 - [ ] Security review of the socket before merging (new attack surface). The
   daemon runs as root, so a socket bug is a root bug: socket `0660` with an
   `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts
-  against the NVML constraints.
+  against the NVML constraints. All four are implemented (NV-1 in
+  `SECURITY_AUDIT.md`); the review itself, with the `security-audit` skill in
+  the `standard` profile, has not been done.
 - [ ] Harden the unit further (`SystemCallFilter=@system-service`,
   `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
   re-check that NVML and cgo still work on CachyOS.
