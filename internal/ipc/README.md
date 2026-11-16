@@ -184,6 +184,7 @@ again.
   "battery": {"present": false, "on_ac": true, "charging": false, "pct": 100},
   "fah": {"paused": false, "reachable": true, "observed_at": "2026-11-16T02:13:01-03:00"},
   "game_sessions": [],
+  "pause_list_supported": true,
   "pause_processes": ["blender"],
   "pause_matches": [],
   "updated_at": "2026-11-16T02:13:01-03:00"
@@ -195,6 +196,8 @@ again.
 - `manual_override`: `none` or `pause`.
 - `paused_by_us`: the current FAH pause is the daemon's, so the daemon will
   resume it.
+- `pause_list_supported`: false where `set_pause_processes` answers
+  `unsupported` (macOS), so a client can disable the control up front.
 - The status is a snapshot taken at `updated_at`, at the end of the last tick
   or command. Telemetry and game sessions are the last known values.
 - `fah` is what the daemon learned the last time it talked to FAH

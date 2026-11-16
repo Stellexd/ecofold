@@ -104,6 +104,9 @@ type Status struct {
 
 	// GameSessions are the live game sessions (Linux detection layer 2).
 	GameSessions []string `json:"game_sessions"`
+	// PauseListSupported is false when the collector cannot match processes
+	// (macOS): SetPauseProcesses then fails with ErrUnsupported.
+	PauseListSupported bool `json:"pause_list_supported"`
 	// PauseProcesses is the pause list; PauseMatches are the running
 	// processes that match it.
 	PauseProcesses []string `json:"pause_processes"`
@@ -185,6 +188,7 @@ func (d *Daemon) publish() Status {
 		Battery:            d.battery,
 		FAH:                d.fahStatus,
 		GameSessions:       d.sessions,
+		PauseListSupported: d.pauseListSupported(),
 		PauseProcesses:     d.pauseProcesses,
 		PauseMatches:       d.pauseMatches,
 		UpdatedAt:          time.Now(),
@@ -463,6 +467,11 @@ func (d *Daemon) capWanted() bool {
 	return d.powerEnabled && !d.degraded && d.manual == OverrideNone &&
 		d.haveDecision && !isPause(d.lastDecision) &&
 		!(d.resumeHold > 0 && d.pausedByUs)
+}
+
+func (d *Daemon) pauseListSupported() bool {
+	_, ok := d.collector.(PauseListSetter)
+	return ok
 }
 
 func (d *Daemon) setPauseProcesses(patterns []string) error {
