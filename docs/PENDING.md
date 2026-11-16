@@ -6,7 +6,7 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-16 (M3 IPC backend on `feat/m3-ipc-socket`).
+Last updated: 2026-11-16 (M3 GUI on `feat/m3-gui`).
 
 ## Next session
 
@@ -17,8 +17,9 @@ Last updated: 2026-11-16 (M3 IPC backend on `feat/m3-ipc-socket`).
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. M3 backend is written and verified on CachyOS (`feat/m3-ipc-socket`):
-   next the security review of the socket, then the GUI.
+3. M3 is written: the IPC backend is verified on CachyOS and the GUI is
+   implemented (`feat/m3-gui`). Next: try the GUI on both desktops (checklist
+   in section 3), then the security review of the socket.
 
 ## Road to v0.1.0
 
@@ -125,9 +126,30 @@ always stop folding.
 - [ ] Harden the unit further (`SystemCallFilter=@system-service`,
   `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
   re-check that NVML and cgo still work on CachyOS.
-- [ ] Add Wails to `go.mod`; system tray with state (Folding / Paused by game /
-  Battery) and current TDP. The GUI stays unprivileged.
-- [ ] GUI handles the daemon being down (shows "daemon not running", no crash).
+- [x] System tray with state (Folding / Paused by game / Battery) and current
+  TDP, plus a control panel. The GUI stays unprivileged. Built with Fyne in
+  pure Go instead of Wails: `cmd/ecofold-gui` and `internal/gui`.
+- [x] GUI handles the daemon being down (shows "Daemon not running" or
+  "Access denied", no crash) and reconnects by itself.
+- [ ] **Try the GUI on real desktops.** It was written on macOS. Automated
+  tests cover the controller against a real socket and the panel on Fyne's
+  software driver; the real binary was only launched on macOS for a few
+  seconds (it started, connected to a mock daemon and survived the daemon
+  stopping). Nobody has looked at the real window or tray yet.
+  - [ ] CachyOS: `make build-gui` with cgo (never built on Linux: the machine
+    was unreachable), then `go test -race ./...`.
+  - [ ] CachyOS: reinstall the daemon first. The installed build (`933170e`)
+    predates `pause_list_supported`, so the GUI would show the pause list as
+    unavailable.
+  - [ ] KDE Plasma (Wayland): the tray icon appears and changes color with the
+    mode, the menu works, and the window's X hides it instead of quitting.
+  - [ ] macOS: the menu bar icon and menu, and the control panel with the
+    power control hidden and the pause list disabled.
+  - [ ] Against the real daemon: pause, resume (also during a game, to see
+    the `game_active` message), eco limit and pause list.
+- [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
+  with an XDG autostart entry / a LaunchAgent), an application icon and
+  bundle for macOS, and the Folding@home project details in the panel.
 
 ### 4. M4 (issue #4): CI, packaging and release
 

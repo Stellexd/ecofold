@@ -1,7 +1,8 @@
 # `internal/ipc`: daemon control socket
 
 The channel between `ecofold-daemon` (root on Linux) and its unprivileged
-clients, today the GUI. One JSON message per line over a Unix domain socket.
+clients, today the GUI (`cmd/ecofold-gui`, through the controller in
+`internal/gui`). One JSON message per line over a Unix domain socket.
 
 The package imports only the standard library and `golang.org/x/sys`. It does
 not import `internal/daemon`: the daemon plugs in through `ipc.Handler`, and
