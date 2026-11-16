@@ -144,8 +144,8 @@ Notes:
   list come from the command-line flags again, and the manual pause is gone.
   FAH stays paused; if the daemon made the pause, the pause marker makes it
   resume after the startup hold.
-- On macOS `set_pause_processes` is accepted and reported in the status, but
-  it has no effect yet: the macOS collector cannot see processes.
+- On macOS `set_pause_processes` answers `unsupported`, like `set_eco_watts`:
+  the macOS collector cannot see processes, so a pause list would do nothing.
 
 ### Error codes
 

@@ -135,9 +135,9 @@ always stop folding.
 - [ ] The `fah` block of the status is what the daemon saw the last time it
   paused or resumed. A pause made in FAH's own UI does not show until then.
   Add a slow periodic `GetStatus` if the GUI needs it.
-- [ ] On macOS `set_pause_processes` is accepted but has no effect:
-  `DarwinCollector` stores the list and cannot match processes. Either
-  implement matching or make the command answer `unsupported` there.
+- [ ] Pause list on macOS: `set_pause_processes` and `-pause-processes` are
+  refused or ignored there (`unsupported`), because `DarwinCollector` reads
+  ioreg only. It needs a per-process source before it can be supported.
 - [ ] Security review of the socket before merging (new attack surface). The
   daemon runs as root, so a socket bug is a root bug: socket `0660` with an
   `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts

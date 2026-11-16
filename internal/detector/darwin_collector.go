@@ -28,6 +28,10 @@ var ErrBatteryVanished = errors.New("detector: battery vanished after it was see
 //
 // DarwinCollector is not safe for concurrent use by multiple goroutines; each
 // daemon tick creates one snapshot at a time.
+//
+// It has no SetPauseProcesses on purpose: ioreg has no per-process view, so a
+// pause list could never match. Without the method the daemon answers
+// "unsupported" instead of accepting a list that does nothing.
 type DarwinCollector struct {
 	// fetch is the ioreg seam. Production uses FetchIORegContext.
 	fetch func(ctx context.Context, class string) ([]byte, error)
@@ -38,16 +42,6 @@ type DarwinCollector struct {
 	battValid    bool
 	// seenBattery latches once any read reports HasBattery=true.
 	seenBattery bool
-	// pause is the user's pause list. It is stored for parity with
-	// LinuxCollector but not matched: ioreg has no per-process view.
-	pause []string
-}
-
-// SetPauseProcesses stores the user's pause list. Patterns must come from
-// ParsePauseProcesses. Unlike LinuxCollector, this collector cannot see
-// processes, so the list never pauses folding on macOS.
-func (c *DarwinCollector) SetPauseProcesses(patterns []string) {
-	c.pause = append([]string(nil), patterns...)
 }
 
 // NewDarwinCollector returns a collector that runs /usr/sbin/ioreg.

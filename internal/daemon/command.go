@@ -65,9 +65,10 @@ const (
 	OverridePause Override = "pause"
 )
 
-// PauseListSetter is implemented by collectors that accept a new pause list
-// at runtime. The daemon calls it only from the loop goroutine, between
-// Collect calls.
+// PauseListSetter is implemented by collectors that can match a pause list
+// against running processes (LinuxCollector). A collector that cannot must
+// not implement it: SetPauseProcesses then fails with ErrUnsupported. The
+// daemon calls it only from the loop goroutine, between Collect calls.
 type PauseListSetter interface {
 	SetPauseProcesses(patterns []string)
 }
