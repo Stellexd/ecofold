@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/url"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -20,7 +21,7 @@ const appID = "io.github.stellexd.ecofold"
 func runUI(logger *slog.Logger, opts options) int {
 	a := app.NewWithID(appID)
 	w := a.NewWindow("EcoFold")
-	w.Resize(fyne.NewSize(520, 680))
+	w.Resize(fyne.NewSize(540, 780))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -48,12 +49,22 @@ func runUI(logger *slog.Logger, opts options) int {
 		SocketPath: opts.socketPath,
 		Poll:       opts.poll,
 		OnChange:   func(v gui.View) { fyne.Do(func() { render(v) }) },
+		Projects:   gui.NewProjectClient(""),
 	})
 	p = newPanel(actions{
 		pause:        func() { run(ctrl.Pause) },
 		resume:       func() { run(ctrl.Resume) },
 		setEcoWatts:  func(watts int) { run(func(c context.Context) { ctrl.SetEcoWatts(c, watts) }) },
 		setPauseList: func(text string) { run(func(c context.Context) { ctrl.SetPauseProcesses(c, text) }) },
+		openURL: func(link string) {
+			u, err := url.Parse(link)
+			if err == nil {
+				err = a.OpenURL(u)
+			}
+			if err != nil {
+				logger.Warn("could not open the browser", "url", link, "err", err)
+			}
+		},
 	})
 	w.SetContent(p.root)
 

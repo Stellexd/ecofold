@@ -33,6 +33,9 @@ type Config struct {
 	// goroutine that caused it. It must not block; a UI should hand the view
 	// to its own thread.
 	OnChange func(View)
+	// Projects fetches the active Folding@home project's metadata for
+	// View.Project. Nil disables it: the view only carries the project id.
+	Projects *ProjectClient
 }
 
 // Controller keeps a View in sync with the daemon and sends the user's
@@ -46,12 +49,15 @@ type Controller struct {
 	poll     time.Duration
 	timeout  time.Duration
 	onChange func(View)
+	projects *ProjectClient
 
-	// clientMu guards the lazily dialed client; mu guards the view.
-	clientMu sync.Mutex
-	client   *ipc.Client
-	mu       sync.Mutex
-	view     View
+	// clientMu guards the lazily dialed client; mu guards the view and
+	// lookingUp, the project id being fetched (0: none).
+	clientMu  sync.Mutex
+	client    *ipc.Client
+	mu        sync.Mutex
+	view      View
+	lookingUp int
 }
 
 // New returns a Controller. Nothing is dialed until Run or the first call.
@@ -62,7 +68,7 @@ func New(cfg Config) *Controller {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
 	}
-	c := &Controller{path: cfg.SocketPath, poll: cfg.Poll, timeout: cfg.Timeout, onChange: cfg.OnChange}
+	c := &Controller{path: cfg.SocketPath, poll: cfg.Poll, timeout: cfg.Timeout, onChange: cfg.OnChange, projects: cfg.Projects}
 	c.view.Offline, c.view.OfflineHint = "Connecting…", ""
 	return c
 }
@@ -104,8 +110,57 @@ func (c *Controller) Refresh(ctx context.Context) {
 			return
 		}
 		v.Connected, v.Offline, v.OfflineHint = true, "", ""
-		v.Status = st
+		c.setStatus(v, st)
 	})
+	c.lookupProject(ctx)
+}
+
+// setStatus stores st in v and keeps v.Project in step with the active
+// project: it is dropped when the project changes and filled from the cache
+// when it can be.
+func (c *Controller) setStatus(v *View, st Status) {
+	v.Status = st
+	id := st.FAH.ActiveProjectID
+	if v.Project.ID == id {
+		return
+	}
+	v.Project = Project{}
+	if c.projects != nil && id > 0 {
+		v.Project, _ = c.projects.Cached(id)
+	}
+}
+
+// lookupProject fetches the active project's metadata in the background when
+// the view does not have it yet, one lookup at a time. A failure changes
+// nothing: the view keeps the bare project id and a later poll tries again.
+func (c *Controller) lookupProject(ctx context.Context) {
+	if c.projects == nil {
+		return
+	}
+	c.mu.Lock()
+	id := c.view.Status.FAH.ActiveProjectID
+	if !c.view.Connected || id <= 0 || c.view.Project.ID == id || c.lookingUp != 0 {
+		c.mu.Unlock()
+		return
+	}
+	c.lookingUp = id
+	c.mu.Unlock()
+
+	go func() {
+		p, err := c.projects.Lookup(ctx, id)
+		c.mu.Lock()
+		c.lookingUp = 0
+		stale := err != nil || c.view.Status.FAH.ActiveProjectID != id
+		c.mu.Unlock()
+		if stale || ctx.Err() != nil {
+			return
+		}
+		c.update(func(v *View) {
+			if v.Status.FAH.ActiveProjectID == id {
+				v.Project = p
+			}
+		})
+	}()
 }
 
 // Pause asks the daemon to hold folding paused until Resume.
@@ -172,9 +227,10 @@ func (c *Controller) act(ctx context.Context, cmd string, args any, okMsg string
 	case err == nil:
 		c.update(func(v *View) {
 			v.Connected, v.Offline, v.OfflineHint = true, "", ""
-			v.Status = st
+			c.setStatus(v, st)
 			v.Message, v.MessageIsError, v.MessageAt = okMsg, false, time.Now()
 		})
+		c.lookupProject(ctx)
 	case errors.As(err, &remote):
 		// The daemon answered, so it is up. Some refusals still change its
 		// state (force_resume clears the manual pause), so read it again.

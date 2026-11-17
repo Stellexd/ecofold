@@ -177,9 +177,18 @@ always stop folding.
     daemon on the MacBook Air M4.
   - [x] **3. Tests and checks.** `gofmt -l .`, `go vet ./...`,
     `go test -race ./...` and `make build` pass on macOS.
+- [x] **Control panel redesign and project metadata** (2026-11-17). The GUI
+  fetches `api.foldingathome.org/project/<id>` (3 s timeout, cached by id, a
+  failure is retried after a minute and never marks the daemon offline) and
+  the "Scientific Impact & Compute Engine" card shows the cause, institution
+  and a link to the stats page. The GPU figures are a 3-column grid. The
+  BOINC engines in the selector only announce v0.2. The "Community
+  Leaderboard" opt-in is stored in the local preferences and sends nothing:
+  `ecofold-web` does not exist yet. Only seen on Fyne's software driver;
+  look at it on Plasma and macOS.
 - [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
-  with an XDG autostart entry / a LaunchAgent), an application icon and
-  bundle for macOS, and the Folding@home project details in the panel.
+  with an XDG autostart entry / a LaunchAgent), and an application icon and
+  bundle for macOS.
 
 ### 4. M4 (issue #4): CI, packaging and release
 

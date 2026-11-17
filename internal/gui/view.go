@@ -104,6 +104,9 @@ type View struct {
 	// Status is the last status received. It is meaningful only while
 	// Connected.
 	Status Status
+	// Project is the metadata of Status.FAH.ActiveProjectID once it has been
+	// fetched. Until then, or when the lookup fails, it is the zero value.
+	Project Project
 
 	// Message is the result of the last user action, shown in the status
 	// bar; MessageIsError marks a failure.
@@ -225,28 +228,41 @@ func (v View) FAHLabel() string {
 	}
 }
 
-// UsageLabel describes what the GPU is doing. A system without power control
-// and without VRAM figures (Apple Silicon) has no watts or temperature to
-// show, only the device-wide utilization.
-func (v View) UsageLabel() string {
-	g := v.Status.GPU
-	if !v.Status.PowerCapable && g.TotalVRAMMiB == 0 {
-		return fmt.Sprintf("GPU utilization: %d %% · In-use memory: %d MiB", g.UtilPct, g.InUseMemMiB)
-	}
-	return fmt.Sprintf("Drawing %d W · %d °C · VRAM %d / %d MiB", g.PowerUsageW, g.TempC, g.UsedVRAMMiB, g.TotalVRAMMiB)
+// Metric is one labelled figure of the GPU card.
+type Metric struct {
+	Label, Value string
 }
 
-// PowerLabel describes the GPU power limit.
-func (v View) PowerLabel() string {
-	s := v.Status
-	switch {
-	case !s.PowerCapable:
-		return "Power limit: managed by the system firmware"
-	case s.PowerLimitW == s.DefaultPowerLimitW:
-		return fmt.Sprintf("Power limit: %d W (default)", s.PowerLimitW)
-	default:
-		return fmt.Sprintf("Power limit: %d W (default %d W)", s.PowerLimitW, s.DefaultPowerLimitW)
+// Metrics are the three figures of the GPU card. A system without power
+// control and without VRAM figures (Apple Silicon) has no watts or
+// temperature to show, only the device-wide load and memory.
+func (v View) Metrics() [3]Metric {
+	s, g := v.Status, v.Status.GPU
+	if !s.PowerCapable && g.TotalVRAMMiB == 0 {
+		return [3]Metric{
+			{"GPU Load", fmt.Sprintf("%d %%", g.UtilPct)},
+			{"Unified Memory", fmt.Sprintf("%d MiB", g.InUseMemMiB)},
+			{"Power Mode", "Firmware Managed"},
+		}
 	}
+	power := fmt.Sprintf("%d W", g.PowerUsageW)
+	if s.PowerLimitW > 0 {
+		power = fmt.Sprintf("%d W / %d W", g.PowerUsageW, s.PowerLimitW)
+	}
+	return [3]Metric{
+		{"Power", power},
+		{"Temperature", fmt.Sprintf("%d °C", g.TempC)},
+		{"VRAM", fmt.Sprintf("%d / %d MiB", g.UsedVRAMMiB, g.TotalVRAMMiB)},
+	}
+}
+
+// CauseLabel is the active project's research area, or empty when it is not
+// known.
+func (v View) CauseLabel() string {
+	if v.Project.Cause == "" {
+		return ""
+	}
+	return "Researching: " + v.Project.Cause
 }
 
 // BatteryLabel describes the battery, or is empty without one.

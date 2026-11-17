@@ -679,17 +679,21 @@ func TestViewLabels(t *testing.T) {
 	nvidia := mk(ModeFolding, func(s *Status) {
 		s.GPU.PowerUsageW, s.GPU.TempC, s.GPU.UsedVRAMMiB, s.GPU.TotalVRAMMiB = 118, 61, 812, 8151
 	})
-	if got := nvidia.UsageLabel(); got != "Drawing 118 W · 61 °C · VRAM 812 / 8151 MiB" {
-		t.Errorf("uso = %q", got)
+	nvidia.Status.PowerLimitW = 123
+	want := [3]Metric{{"Power", "118 W / 123 W"}, {"Temperature", "61 °C"}, {"VRAM", "812 / 8151 MiB"}}
+	if got := nvidia.Metrics(); got != want {
+		t.Errorf("métricas = %v", got)
 	}
 	// No permission: power control is off, the telemetry is still the card's.
-	nvidia.Status.PowerCapable = false
-	if got := nvidia.UsageLabel(); got != "Drawing 118 W · 61 °C · VRAM 812 / 8151 MiB" {
-		t.Errorf("uso sin permiso = %q", got)
+	nvidia.Status.PowerCapable, nvidia.Status.PowerLimitW = false, 0
+	want[0].Value = "118 W"
+	if got := nvidia.Metrics(); got != want {
+		t.Errorf("métricas sin permiso = %v", got)
 	}
 	mac := mk(ModeFoldingEco, func(s *Status) { s.PowerCapable, s.GPU.UtilPct, s.GPU.InUseMemMiB = false, 24, 1234 })
-	if got := mac.UsageLabel(); got != "GPU utilization: 24 % · In-use memory: 1234 MiB" {
-		t.Errorf("uso en macOS = %q", got)
+	want = [3]Metric{{"GPU Load", "24 %"}, {"Unified Memory", "1234 MiB"}, {"Power Mode", "Firmware Managed"}}
+	if got := mac.Metrics(); got != want {
+		t.Errorf("métricas en macOS = %v", got)
 	}
 }
 

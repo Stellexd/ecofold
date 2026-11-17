@@ -19,6 +19,7 @@ type recorder struct {
 	pauses, resumes int
 	watts           []int
 	lists           []string
+	urls            []string
 }
 
 func (r *recorder) actions() actions {
@@ -27,6 +28,7 @@ func (r *recorder) actions() actions {
 		resume:       func() { r.resumes++ },
 		setEcoWatts:  func(w int) { r.watts = append(r.watts, w) },
 		setPauseList: func(s string) { r.lists = append(r.lists, s) },
+		openURL:      func(u string) { r.urls = append(r.urls, u) },
 	}
 }
 
@@ -38,7 +40,7 @@ func newTestPanel(t *testing.T) (*panel, *recorder, fyne.Window) {
 	rec := &recorder{}
 	p := newPanel(rec.actions())
 	w := test.NewWindow(p.root)
-	w.Resize(fyne.NewSize(520, 680))
+	w.Resize(fyne.NewSize(540, 780))
 	t.Cleanup(w.Close)
 	return p, rec, w
 }
@@ -57,7 +59,22 @@ func linuxView() gui.View {
 	s.PauseListSupported = true
 	s.PauseProcesses = []string{"blender", "obs*"}
 	s.UpdatedAt = time.Date(2026, 11, 16, 15, 4, 5, 0, time.Local)
-	return gui.View{Connected: true, Status: s}
+	return gui.View{Connected: true, Status: s, Project: gui.Project{
+		ID:          18264,
+		Cause:       "Alzheimer's Disease",
+		Institution: "University of Pennsylvania",
+		Manager:     "Justin Miller",
+		Summary:     "Alzheimer's disease is a significant cause of death and memory loss.",
+	}}
+}
+
+// metricTexts flattens the GPU grid into "caption=value" cells.
+func metricTexts(p *panel) [3]string {
+	var out [3]string
+	for i, m := range p.metrics {
+		out[i] = m.caption.Text + "=" + m.value.Text
+	}
+	return out
 }
 
 // macView is an Apple Silicon laptop: no power limit, no pause list, a
@@ -83,8 +100,9 @@ func TestPanelOnLinux(t *testing.T) {
 	if p.mode.Text != "Folding" || p.fah.Text != "Folding@home: running (project #18264)" {
 		t.Fatalf("cabecera = %q / %q", p.mode.Text, p.fah.Text)
 	}
-	if p.gpuName.Text != "NVIDIA GeForce RTX 5060" || p.usage.Text != "Drawing 118 W · 61 °C · VRAM 812 / 8151 MiB" {
-		t.Fatalf("gpu = %q / %q", p.gpuName.Text, p.usage.Text)
+	wantGrid := [3]string{"Power=118 W / 123 W", "Temperature=61 °C", "VRAM=812 / 8151 MiB"}
+	if p.gpuName.Text != "NVIDIA GeForce RTX 5060" || metricTexts(p) != wantGrid || !p.grid.Visible() || len(p.grid.Objects) != 3 {
+		t.Fatalf("gpu = %q / %v", p.gpuName.Text, metricTexts(p))
 	}
 	if p.badge.Visible() || p.offline.Visible() || p.sessions.Visible() {
 		t.Fatal("badge, aviso offline o sesiones visibles sin motivo")
@@ -95,8 +113,8 @@ func TestPanelOnLinux(t *testing.T) {
 	if !p.ecoApply.Disabled() {
 		t.Fatal("Apply habilitado sin cambios")
 	}
-	if p.power.Text != "Power limit: 123 W (default 145 W)" || !strings.Contains(p.ecoNote.Text, "100-145 W") {
-		t.Fatalf("potencia = %q / %q", p.power.Text, p.ecoNote.Text)
+	if !strings.Contains(p.ecoNote.Text, "100-145 W") {
+		t.Fatalf("nota de potencia = %q", p.ecoNote.Text)
 	}
 	if p.batteryCard.Visible() {
 		t.Fatal("tarjeta de batería visible en un equipo sin batería")
@@ -122,12 +140,14 @@ func TestPanelOnMac(t *testing.T) {
 	if p.ecoBox.Visible() {
 		t.Fatal("control de EcoWatts visible sin control de potencia")
 	}
-	if p.gpuName.Text != "Apple M4" || p.usage.Text != "GPU utilization: 24 % · In-use memory: 1234 MiB" {
-		t.Fatalf("gpu = %q / %q", p.gpuName.Text, p.usage.Text)
+	wantGrid := [3]string{"GPU Load=24 %", "Unified Memory=1234 MiB", "Power Mode=Firmware Managed"}
+	if p.gpuName.Text != "Apple M4" || metricTexts(p) != wantGrid {
+		t.Fatalf("gpu = %q / %v", p.gpuName.Text, metricTexts(p))
 	}
+	shown := p.gpuName.Text + strings.Join(wantGrid[:], "")
 	for _, fake := range []string{" W", "°C", "VRAM", "Mock"} {
-		if strings.Contains(p.usage.Text, fake) || strings.Contains(p.gpuName.Text, fake) {
-			t.Fatalf("dato simulado %q en el panel: %q / %q", fake, p.gpuName.Text, p.usage.Text)
+		if strings.Contains(shown, fake) {
+			t.Fatalf("dato simulado %q en el panel: %q", fake, shown)
 		}
 	}
 
@@ -139,8 +159,8 @@ func TestPanelOnMac(t *testing.T) {
 		t.Fatalf("FAH caído: %q / %q", p.mode.Text, p.fah.Text)
 	}
 	p.update(macView())
-	if !strings.Contains(p.ecoNote.Text, "firmware") || !strings.Contains(p.power.Text, "firmware") {
-		t.Fatalf("falta la explicación del firmware: %q / %q", p.ecoNote.Text, p.power.Text)
+	if !strings.Contains(p.ecoNote.Text, "firmware") {
+		t.Fatalf("falta la explicación del firmware: %q", p.ecoNote.Text)
 	}
 	if !p.batteryCard.Visible() || p.battery.Text != "53 %, on battery" {
 		t.Fatalf("batería: visible=%v texto=%q", p.batteryCard.Visible(), p.battery.Text)
@@ -188,7 +208,8 @@ func TestPanelStates(t *testing.T) {
 	if p.mode.Text != "Daemon Offline" || !p.offline.Visible() || !strings.Contains(p.offline.Text, "Daemon not running") {
 		t.Fatalf("offline: modo=%q aviso=%q", p.mode.Text, p.offline.Text)
 	}
-	if !p.pauseBtn.Disabled() || !p.resume.Disabled() || p.ecoBox.Visible() || !p.pauseEntry.Disabled() || p.fah.Visible() {
+	if !p.pauseBtn.Disabled() || !p.resume.Disabled() || p.ecoBox.Visible() || !p.pauseEntry.Disabled() || p.fah.Visible() ||
+		p.grid.Visible() || p.projBox.Visible() {
 		t.Fatal("controles activos sin daemon")
 	}
 	if p.updated.Text != "offline" {
@@ -229,5 +250,107 @@ func TestPanelEditsSurviveRefresh(t *testing.T) {
 	p.update(linuxView())
 	if p.ecoSlide.Value != 123 || p.pauseEntry.Text != "blender, obs*" || !p.ecoApply.Disabled() || !p.pauseSave.Disabled() {
 		t.Fatalf("tras aplicar: %v / %q", p.ecoSlide.Value, p.pauseEntry.Text)
+	}
+}
+
+// TestPanelImpactCard: the project is named and linked with or without its
+// metadata, and the BOINC engines only announce v0.2.
+func TestPanelImpactCard(t *testing.T) {
+	p, rec, _ := newTestPanel(t)
+	p.update(linuxView())
+
+	if !p.projBox.Visible() || p.projNone.Visible() || p.projTitle.Text != "Project #18264" {
+		t.Fatalf("proyecto: visible=%v título=%q", p.projBox.Visible(), p.projTitle.Text)
+	}
+	if p.projCause.Text != "Researching: Alzheimer's Disease" || p.projOrg.Text != "University of Pennsylvania · Justin Miller" ||
+		!strings.HasPrefix(p.projSummary.Text, "Alzheimer's disease") {
+		t.Fatalf("metadatos = %q / %q / %q", p.projCause.Text, p.projOrg.Text, p.projSummary.Text)
+	}
+	test.Tap(p.projBtn)
+	if len(rec.urls) != 1 || rec.urls[0] != "https://stats.foldingathome.org/project/18264" {
+		t.Fatalf("enlaces = %q", rec.urls)
+	}
+
+	// No network: only the project number, and the link still works.
+	v := linuxView()
+	v.Project = gui.Project{}
+	p.update(v)
+	if !p.projBox.Visible() || p.projTitle.Text != "Project #18264" ||
+		p.projCause.Visible() || p.projOrg.Visible() || p.projSummary.Visible() {
+		t.Fatalf("sin metadatos: título=%q causa=%v org=%v resumen=%v",
+			p.projTitle.Text, p.projCause.Visible(), p.projOrg.Visible(), p.projSummary.Visible())
+	}
+	if p.offline.Visible() || p.pauseBtn.Disabled() {
+		t.Fatal("sin metadatos el panel se mostró desconectado")
+	}
+	test.Tap(p.projBtn)
+	if len(rec.urls) != 2 {
+		t.Fatalf("enlaces = %q", rec.urls)
+	}
+
+	// No work unit: nothing to link.
+	v.Status.FAH.ActiveProjectID = 0
+	p.update(v)
+	if p.projBox.Visible() || !p.projNone.Visible() || p.projNone.Text != "No active project right now." {
+		t.Fatalf("sin proyecto: caja=%v nota=%q", p.projBox.Visible(), p.projNone.Text)
+	}
+
+	// Compute engine: four options, Folding@home active.
+	if len(p.engine.Options) != 4 || p.engine.Selected != engineFAH || p.engineNote.Visible() {
+		t.Fatalf("motor: %d opciones, %q, nota=%v", len(p.engine.Options), p.engine.Selected, p.engineNote.Visible())
+	}
+	p.engine.SetSelected("BOINC — Einstein@Home (Astrophysics — Coming in v0.2)")
+	if p.engine.Selected != engineFAH {
+		t.Fatalf("motor seleccionado = %q", p.engine.Selected)
+	}
+	if !p.engineNote.Visible() || !strings.Contains(p.engineNote.Text, "Einstein@Home") ||
+		!strings.Contains(p.engineNote.Text, "v0.2") || !strings.Contains(p.engineNote.Text, "BOINC RPC") {
+		t.Fatalf("nota de BOINC = %q (visible=%v)", p.engineNote.Text, p.engineNote.Visible())
+	}
+	// A status refresh keeps the note and the engine.
+	p.update(linuxView())
+	if !p.engineNote.Visible() || p.engine.Selected != engineFAH || !p.projBox.Visible() {
+		t.Fatal("el refresco cambió el selector de motor")
+	}
+}
+
+// TestPanelLeaderboardOptIn: sharing is off by default, the alias follows
+// the check and both survive a restart through the app's preferences.
+func TestPanelLeaderboardOptIn(t *testing.T) {
+	p, _, _ := newTestPanel(t)
+	prefs := fyne.CurrentApp().Preferences()
+
+	if p.shareCheck.Checked || !p.aliasEntry.Disabled() || prefs.Bool(prefShareStats) {
+		t.Fatal("el ranking no está desactivado por defecto")
+	}
+	if p.shareCheck.Text != "Share anonymous compute stats on the Global Leaderboard" ||
+		p.aliasEntry.PlaceHolder != "Public Alias (optional)" {
+		t.Fatalf("textos = %q / %q", p.shareCheck.Text, p.aliasEntry.PlaceHolder)
+	}
+
+	p.shareCheck.SetChecked(true)
+	if p.aliasEntry.Disabled() || !prefs.Bool(prefShareStats) {
+		t.Fatal("marcar el check no habilitó el alias o no se guardó")
+	}
+	p.aliasEntry.SetText("  stellex ")
+	if got := prefs.String(prefPublicAlias); got != "stellex" {
+		t.Fatalf("alias guardado = %q", got)
+	}
+	// A status refresh does not touch them.
+	p.update(linuxView())
+	if !p.shareCheck.Checked || p.aliasEntry.Text != "  stellex " {
+		t.Fatalf("tras el refresco: check=%v alias=%q", p.shareCheck.Checked, p.aliasEntry.Text)
+	}
+
+	// A new panel on the same app: the choice is restored.
+	again := newPanel((&recorder{}).actions())
+	if !again.shareCheck.Checked || again.aliasEntry.Disabled() || again.aliasEntry.Text != "stellex" {
+		t.Fatalf("al reabrir: check=%v alias=%q", again.shareCheck.Checked, again.aliasEntry.Text)
+	}
+
+	// Opting out keeps the alias but locks it.
+	again.shareCheck.SetChecked(false)
+	if prefs.Bool(prefShareStats) || !again.aliasEntry.Disabled() || prefs.String(prefPublicAlias) != "stellex" {
+		t.Fatal("desmarcar no desactivó el ranking")
 	}
 }
