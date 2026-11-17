@@ -144,10 +144,12 @@ always stop folding.
     StatusNotifierItem and exited cleanly on SIGINT. Nobody looked at it:
     the visual checks below are still open. It used about 250 MiB of RSS
     while hidden; measure it properly against the "minimal footprint" rule.
-  - [ ] CachyOS: reinstall the daemon first (needs `sudo`, so it was not done
-    over SSH). The installed build (`933170e`) predates `pause_list_supported`
-    and the new `fah` and `gpu` fields, so the GUI would show the pause list
-    as unavailable and no project.
+  - [x] CachyOS: daemon reinstalled from `19a276c` (2026-11-17). Active,
+    socket `0660` in a `0750` directory, 123 W while folding, and the status
+    carries `state`, `active_project_id` and `pause_list_supported`. The
+    control panel was seen on Plasma: green dot, "running (project #18264)",
+    the NVML usage line, the eco slider (range 123-145 W) and the pause list
+    enabled.
   - [ ] KDE Plasma (Wayland): the tray icon appears and changes color with the
     mode, the menu works, and the window's X hides it instead of quitting.
   - [ ] macOS: the menu bar icon and menu, and the control panel with the
