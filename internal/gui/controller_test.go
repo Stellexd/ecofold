@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Stellexd/ecofold/internal/daemon"
+	"github.com/Stellexd/ecofold/internal/fah"
 	"github.com/Stellexd/ecofold/internal/ipc"
 )
 
@@ -545,9 +546,11 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 		Mode: daemon.ModePausedManual, ManualOverride: daemon.OverridePause, PausedByUs: true, Degraded: true,
 		PowerCapable: true, PowerEnabled: true, CapApplied: true,
 		PowerLimitW: 123, DefaultPowerLimitW: 145, MinPowerLimitW: 100, MaxPowerLimitW: 145, EcoWatts: 123,
-		GPU:                daemon.GPUStatus{Name: "RTX", TempC: 60, PowerUsageW: 110, UsedVRAMMiB: 800, TotalVRAMMiB: 8151},
-		Battery:            daemon.BatteryStatus{Present: true, OnAC: true, Charging: true, Pct: 77},
-		FAH:                daemon.FAHStatus{Paused: true, Reachable: true, ObservedAt: time.Unix(1700000000, 0)},
+		GPU: daemon.GPUStatus{Name: "RTX", TempC: 60, PowerUsageW: 110, UsedVRAMMiB: 800, TotalVRAMMiB: 8151,
+			UtilPct: 24, InUseMemMiB: 1234},
+		Battery: daemon.BatteryStatus{Present: true, OnAC: true, Charging: true, Pct: 77},
+		FAH: daemon.FAHStatus{Paused: true, State: fah.StatePaused, ActiveProjectID: 18264, Reachable: true,
+			ObservedAt: time.Unix(1700000000, 0)},
 		GameSessions:       []string{"steam:1"},
 		PauseListSupported: true,
 		PauseProcesses:     []string{"blender"},
@@ -573,6 +576,9 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 	}
 	if got.Mode != ModePausedManual || got.ManualOverride != OverridePause {
 		t.Fatalf("constantes desalineadas: %q / %q", got.Mode, got.ManualOverride)
+	}
+	if FAHStateIdle != fah.StateIdle {
+		t.Errorf("estado idle del cliente %q, de fah %q", FAHStateIdle, fah.StateIdle)
 	}
 	for client, server := range map[string]daemon.Mode{
 		ModeStarting: daemon.ModeStarting, ModeFolding: daemon.ModeFolding, ModeFoldingEco: daemon.ModeFoldingEco,
@@ -613,6 +619,12 @@ func TestViewLabels(t *testing.T) {
 			ToneBlue, "Paused (Game) — 145 W", "Resume Folding"},
 		{"pausa del usuario en FAH", mk(ModeFolding, func(s *Status) { s.FAH.Paused, s.FAH.Reachable = true, true }),
 			ToneGreen, "Folding — 123 W", "Resume Folding"},
+		{"FAH caído", mk(ModeFolding, func(s *Status) { s.FAH.ObservedAt = time.Now() }),
+			ToneGray, "Folding@home Not Reachable — 123 W", "Pause Folding"},
+		{"FAH caído en batería", mk(ModeFoldingEco, func(s *Status) { s.PowerCapable, s.FAH.ObservedAt = false, time.Now() }),
+			ToneGray, "Folding@home Not Reachable", "Pause Folding"},
+		{"FAH caído durante un juego", mk(ModePausedLoad, func(s *Status) { s.PowerLimitW, s.FAH.ObservedAt = 145, time.Now() }),
+			ToneBlue, "Paused (Game) — 145 W", "Pause Folding"},
 		{"degraded", mk(ModeDegraded, func(s *Status) { s.PowerLimitW = 145 }), ToneGray, "Degraded — 145 W", "Pause Folding"},
 		{"starting", mk(ModeStarting, func(s *Status) { s.PowerLimitW = 0 }), ToneGray, "Starting", "Pause Folding"},
 		{"modo futuro", mk("hibernating", nil), ToneGray, "hibernating — 123 W", "Pause Folding"},
@@ -640,8 +652,44 @@ func TestViewLabels(t *testing.T) {
 	if got := mk(ModeFolding, nil).BatteryLabel(); got != "" {
 		t.Errorf("batería sin batería = %q", got)
 	}
-	if got := mk(ModeFolding, nil).FAHLabel(); got != "Folding@home: not checked yet" {
-		t.Errorf("FAH = %q", got)
+	seen := func(edit func(*Status)) View {
+		return mk(ModeFolding, func(s *Status) {
+			s.FAH.Reachable, s.FAH.ObservedAt, s.FAH.State = true, time.Now(), "folding"
+			edit(s)
+		})
+	}
+	for _, tc := range []struct {
+		name string
+		v    View
+		want string
+	}{
+		{"sin consultar", mk(ModeFolding, nil), "Folding@home: not checked yet"},
+		{"caído", seen(func(s *Status) { s.FAH.Reachable = false }), "Folding@home: not reachable (is the client running?)"},
+		{"con proyecto", seen(func(s *Status) { s.FAH.ActiveProjectID = 18264 }), "Folding@home: running (project #18264)"},
+		{"sin proyecto", seen(func(*Status) {}), "Folding@home: running"},
+		{"idle", seen(func(s *Status) { s.FAH.State = FAHStateIdle }), "Folding@home: idle (waiting for work unit)"},
+		{"pausa del usuario", seen(func(s *Status) { s.FAH.Paused, s.FAH.State = true, "paused" }), "Folding@home: paused"},
+		{"pausa de EcoFold", seen(func(s *Status) { s.FAH.Paused, s.PausedByUs = true, true }), "Folding@home: paused by EcoFold"},
+	} {
+		if got := tc.v.FAHLabel(); got != tc.want {
+			t.Errorf("FAH %s = %q, se esperaba %q", tc.name, got, tc.want)
+		}
+	}
+
+	nvidia := mk(ModeFolding, func(s *Status) {
+		s.GPU.PowerUsageW, s.GPU.TempC, s.GPU.UsedVRAMMiB, s.GPU.TotalVRAMMiB = 118, 61, 812, 8151
+	})
+	if got := nvidia.UsageLabel(); got != "Drawing 118 W · 61 °C · VRAM 812 / 8151 MiB" {
+		t.Errorf("uso = %q", got)
+	}
+	// No permission: power control is off, the telemetry is still the card's.
+	nvidia.Status.PowerCapable = false
+	if got := nvidia.UsageLabel(); got != "Drawing 118 W · 61 °C · VRAM 812 / 8151 MiB" {
+		t.Errorf("uso sin permiso = %q", got)
+	}
+	mac := mk(ModeFoldingEco, func(s *Status) { s.PowerCapable, s.GPU.UtilPct, s.GPU.InUseMemMiB = false, 24, 1234 })
+	if got := mac.UsageLabel(); got != "GPU utilization: 24 % · In-use memory: 1234 MiB" {
+		t.Errorf("uso en macOS = %q", got)
 	}
 }
 

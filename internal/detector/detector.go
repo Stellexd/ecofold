@@ -180,6 +180,10 @@ type SystemSnapshot struct {
 	// "AGXAcceleratorG16G" on Apple Silicon).
 	GPUClass string
 
+	// GPUModel is the GPU's marketing name when the platform reports one (for
+	// example, "Apple M4"); empty otherwise.
+	GPUModel string
+
 	// GPUDeviceUtilPct is the overall utilization of the GPU device (%).
 	GPUDeviceUtilPct int
 

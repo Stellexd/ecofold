@@ -190,8 +190,7 @@ func (p *panel) update(v gui.View) {
 	// GPU and power.
 	p.gpuName.SetText(orDash(s.GPU.Name))
 	p.power.SetText(v.PowerLabel())
-	p.usage.SetText(fmt.Sprintf("Drawing %d W · %d °C · VRAM %d / %d MiB",
-		s.GPU.PowerUsageW, s.GPU.TempC, s.GPU.UsedVRAMMiB, s.GPU.TotalVRAMMiB))
+	p.usage.SetText(v.UsageLabel())
 	show(p.gpuName, on)
 	show(p.power, on)
 	show(p.usage, on)

@@ -115,13 +115,20 @@ type Status struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// GPUStatus is the last GPU telemetry read.
+// GPUStatus is the last GPU telemetry read. With a simulated provider (macOS,
+// the Linux stub) the watts, temperature and VRAM are zero and Name comes
+// from the collector: a mock's numbers are never published.
 type GPUStatus struct {
 	Name         string `json:"name"`
 	TempC        int    `json:"temp_c"`
 	PowerUsageW  int    `json:"power_usage_w"`
 	UsedVRAMMiB  int    `json:"used_vram_mib"`
 	TotalVRAMMiB int    `json:"total_vram_mib"`
+	// UtilPct and InUseMemMiB are the device-wide metrics of the last
+	// snapshot (macOS ioreg). They stay zero on Linux, where the collector
+	// reports per-process data instead.
+	UtilPct     int `json:"util_pct"`
+	InUseMemMiB int `json:"in_use_mem_mib"`
 }
 
 // BatteryStatus is the battery state of the last snapshot.
@@ -132,12 +139,17 @@ type BatteryStatus struct {
 	Pct      int  `json:"pct"`
 }
 
-// FAHStatus is what the daemon last learned about Folding@home. The daemon
-// talks to FAH only when it pauses or resumes, so a pause the user makes in
-// FAH itself shows up here at the next such action, not immediately.
+// FAHStatus is what the daemon last learned about Folding@home. The loop
+// reads the status again every fahRefreshTicks ticks, so a change made in FAH
+// itself shows up here within that time.
 type FAHStatus struct {
 	Paused bool `json:"paused"`
-	// Reachable is false when the last call failed.
+	// State is one of the fah.State* values; "unknown" until FAH answers.
+	State string `json:"state"`
+	// ActiveProjectID is the project of the running work unit, or 0.
+	ActiveProjectID int `json:"active_project_id"`
+	// Reachable is false when the last call failed; the fields above then
+	// hold the last known values.
 	Reachable bool `json:"reachable"`
 	// ObservedAt is the time of that call; zero means FAH was never asked.
 	ObservedAt time.Time `json:"observed_at"`
@@ -156,21 +168,27 @@ func (d *Daemon) Status() Status {
 	if st := d.status.Load(); st != nil {
 		return st.clone()
 	}
-	return Status{Mode: ModeStarting, ManualOverride: OverrideNone}.clone()
+	return Status{Mode: ModeStarting, ManualOverride: OverrideNone, FAH: FAHStatus{State: fah.StateUnknown}}.clone()
 }
 
 // publish stores a snapshot of the current state. Loop goroutine only.
 func (d *Daemon) publish() Status {
 	if tel, err := d.gpu.GetTelemetry(); err == nil {
 		d.powerLimitW = tel.PowerLimitW
-		d.gpuStatus = GPUStatus{
-			Name:         tel.Name,
-			TempC:        tel.TempC,
-			PowerUsageW:  tel.PowerUsageW,
-			UsedVRAMMiB:  tel.UsedVRAMMiB,
-			TotalVRAMMiB: tel.TotalVRAMMiB,
+		if tel.Simulated {
+			// A mock's watts, temperature and VRAM are not this machine's.
+			d.gpuStatus = GPUStatus{Name: d.gpuName}
+		} else {
+			d.gpuStatus = GPUStatus{
+				Name:         tel.Name,
+				TempC:        tel.TempC,
+				PowerUsageW:  tel.PowerUsageW,
+				UsedVRAMMiB:  tel.UsedVRAMMiB,
+				TotalVRAMMiB: tel.TotalVRAMMiB,
+			}
 		}
 	}
+	d.gpuStatus.UtilPct, d.gpuStatus.InUseMemMiB = d.gpuUtilPct, d.gpuInUseMemMiB
 	st := Status{
 		Mode:               d.mode,
 		ManualOverride:     d.manual,
@@ -491,16 +509,29 @@ func (d *Daemon) readFAH(ctx context.Context) (fah.Status, error) {
 	sctx, cancel := context.WithTimeout(ctx, d.cfg.StatusTimeout)
 	defer cancel()
 	st, err := d.fah.GetStatus(sctx)
-	d.observeFAH(st.Paused, err)
+	d.observeFAH(st, err)
 	return st, err
 }
 
+// refreshFAH reads the FAH status again when the last observation is
+// fahRefreshTicks ticks old. It only feeds Status: decisions read FAH
+// themselves when they need it.
+func (d *Daemon) refreshFAH(ctx context.Context) {
+	if d.fahAge++; d.fahAge < fahRefreshTicks {
+		return
+	}
+	_, _ = d.readFAH(ctx)
+}
+
 // observeFAH records the outcome of a FAH call. On failure the last known
-// paused state is kept.
-func (d *Daemon) observeFAH(paused bool, err error) {
+// state is kept.
+func (d *Daemon) observeFAH(st fah.Status, err error) {
+	d.fahAge = 0
 	d.fahStatus.ObservedAt = time.Now()
 	d.fahStatus.Reachable = err == nil
 	if err == nil {
-		d.fahStatus.Paused = paused
+		d.fahStatus.Paused = st.Paused
+		d.fahStatus.State = st.State
+		d.fahStatus.ActiveProjectID = st.ActiveProjectID
 	}
 }

@@ -45,6 +45,7 @@ type BatteryMetrics struct {
 // GPUMetrics groups raw values extracted from the IOKit IOAccelerator node.
 type GPUMetrics struct {
 	GPUClass           string
+	GPUModel           string
 	GPUDeviceUtilPct   int
 	GPURendererUtilPct int
 	GPUTilerUtilPct    int
@@ -189,6 +190,7 @@ func ParseIOAcceleratorPlist(raw []byte) (GPUMetrics, error) {
 
 		return GPUMetrics{
 			GPUClass:           gpuClass,
+			GPUModel:           n.Model,
 			GPUDeviceUtilPct:   statPct(n.PerformanceStatistics, "Device Utilization %"),
 			GPURendererUtilPct: statPct(n.PerformanceStatistics, "Renderer Utilization %"),
 			GPUTilerUtilPct:    statPct(n.PerformanceStatistics, "Tiler Utilization %"),
@@ -322,6 +324,7 @@ func snapshotFromMetrics(batt BatteryMetrics, gpu GPUMetrics) SystemSnapshot {
 		WallInputMW:        batt.WallInputMW,
 		TimeRemainingMin:   batt.TimeRemainingMin,
 		GPUClass:           gpu.GPUClass,
+		GPUModel:           gpu.GPUModel,
 		GPUDeviceUtilPct:   gpu.GPUDeviceUtilPct,
 		GPURendererUtilPct: gpu.GPURendererUtilPct,
 		GPUTilerUtilPct:    gpu.GPUTilerUtilPct,

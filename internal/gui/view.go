@@ -36,6 +36,8 @@ type Status struct {
 		PowerUsageW  int    `json:"power_usage_w"`
 		UsedVRAMMiB  int    `json:"used_vram_mib"`
 		TotalVRAMMiB int    `json:"total_vram_mib"`
+		UtilPct      int    `json:"util_pct"`
+		InUseMemMiB  int    `json:"in_use_mem_mib"`
 	} `json:"gpu"`
 	Battery struct {
 		Present  bool `json:"present"`
@@ -44,9 +46,11 @@ type Status struct {
 		Pct      int  `json:"pct"`
 	} `json:"battery"`
 	FAH struct {
-		Paused     bool      `json:"paused"`
-		Reachable  bool      `json:"reachable"`
-		ObservedAt time.Time `json:"observed_at"`
+		Paused          bool      `json:"paused"`
+		State           string    `json:"state"`
+		ActiveProjectID int       `json:"active_project_id"`
+		Reachable       bool      `json:"reachable"`
+		ObservedAt      time.Time `json:"observed_at"`
 	} `json:"fah"`
 
 	GameSessions       []string  `json:"game_sessions"`
@@ -67,6 +71,10 @@ const (
 	ModeDegraded      = "degraded"
 
 	OverridePause = "pause"
+
+	// FAHStateIdle is Status.FAH.State when FAH is not paused but no work
+	// unit is running.
+	FAHStateIdle = "idle"
 )
 
 // Tone is the color family of the tray icon.
@@ -111,6 +119,9 @@ func (v View) Tone() Tone {
 	}
 	switch v.Status.Mode {
 	case ModeFolding, ModeFoldingEco:
+		if v.fahUnreachable() {
+			return ToneGray
+		}
 		return ToneGreen
 	case ModePausedLoad:
 		return ToneBlue
@@ -127,10 +138,15 @@ func (v View) ModeLabel() string {
 		return "Daemon Offline"
 	}
 	switch v.Status.Mode {
-	case ModeFolding:
+	case ModeFolding, ModeFoldingEco:
+		// The mode is the daemon's decision; without FAH nothing is folding.
+		if v.fahUnreachable() {
+			return "Folding@home Not Reachable"
+		}
+		if v.Status.Mode == ModeFoldingEco {
+			return "Folding (on battery)"
+		}
 		return "Folding"
-	case ModeFoldingEco:
-		return "Folding (on battery)"
 	case ModePausedLoad:
 		return "Paused (Game)"
 	case ModePausedBattery:
@@ -181,6 +197,13 @@ func (v View) ToggleLabel() string {
 	return "Pause Folding"
 }
 
+// fahUnreachable reports that the daemon asked Folding@home and got no
+// answer. Before the first check it is false.
+func (v View) fahUnreachable() bool {
+	f := v.Status.FAH
+	return !f.ObservedAt.IsZero() && !f.Reachable
+}
+
 // FAHLabel describes what the daemon last saw of Folding@home.
 func (v View) FAHLabel() string {
 	f := v.Status.FAH
@@ -188,14 +211,29 @@ func (v View) FAHLabel() string {
 	case f.ObservedAt.IsZero():
 		return "Folding@home: not checked yet"
 	case !f.Reachable:
-		return "Folding@home: not reachable"
+		return "Folding@home: not reachable (is the client running?)"
 	case f.Paused && v.Status.PausedByUs:
 		return "Folding@home: paused by EcoFold"
 	case f.Paused:
 		return "Folding@home: paused"
+	case f.State == FAHStateIdle:
+		return "Folding@home: idle (waiting for work unit)"
+	case f.ActiveProjectID > 0:
+		return fmt.Sprintf("Folding@home: running (project #%d)", f.ActiveProjectID)
 	default:
 		return "Folding@home: running"
 	}
+}
+
+// UsageLabel describes what the GPU is doing. A system without power control
+// and without VRAM figures (Apple Silicon) has no watts or temperature to
+// show, only the device-wide utilization.
+func (v View) UsageLabel() string {
+	g := v.Status.GPU
+	if !v.Status.PowerCapable && g.TotalVRAMMiB == 0 {
+		return fmt.Sprintf("GPU utilization: %d %% · In-use memory: %d MiB", g.UtilPct, g.InUseMemMiB)
+	}
+	return fmt.Sprintf("Drawing %d W · %d °C · VRAM %d / %d MiB", g.PowerUsageW, g.TempC, g.UsedVRAMMiB, g.TotalVRAMMiB)
 }
 
 // PowerLabel describes the GPU power limit.

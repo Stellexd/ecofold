@@ -181,9 +181,11 @@ again.
   "min_power_limit_w": 100,
   "max_power_limit_w": 145,
   "eco_watts": 123,
-  "gpu": {"name": "...", "temp_c": 61, "power_usage_w": 118, "used_vram_mib": 812, "total_vram_mib": 8192},
+  "gpu": {"name": "...", "temp_c": 61, "power_usage_w": 118, "used_vram_mib": 812, "total_vram_mib": 8192,
+          "util_pct": 0, "in_use_mem_mib": 0},
   "battery": {"present": false, "on_ac": true, "charging": false, "pct": 100},
-  "fah": {"paused": false, "reachable": true, "observed_at": "2026-11-16T02:13:01-03:00"},
+  "fah": {"paused": false, "state": "folding", "active_project_id": 18264, "reachable": true,
+          "observed_at": "2026-11-16T02:13:01-03:00"},
   "game_sessions": [],
   "pause_list_supported": true,
   "pause_processes": ["blender"],
@@ -202,9 +204,16 @@ again.
 - The status is a snapshot taken at `updated_at`, at the end of the last tick
   or command. Telemetry and game sessions are the last known values.
 - `fah` is what the daemon learned the last time it talked to FAH
-  (`observed_at`; the zero time means never). The daemon only talks to FAH
-  when it pauses or resumes, so a pause made in FAH's own UI does not show
-  here until then.
+  (`observed_at`; the zero time means never). The daemon reads the FAH status
+  on its first tick and again every 5 ticks (10 s), so a change made in FAH's
+  own UI shows here within that time. `state` is `folding`, `paused`, `idle`
+  (not paused, no work unit running) or `unknown`; `active_project_id` is 0
+  when no work unit is running. With `reachable` false the other fields are
+  the last known values.
+- `gpu`: with a simulated provider (macOS, the Linux stub) `temp_c`,
+  `power_usage_w` and the VRAM fields are 0, and `name` comes from the
+  collector (`Apple M4`). `util_pct` and `in_use_mem_mib` are the device-wide
+  ioreg metrics on macOS and 0 on Linux.
 
 ## Limits
 

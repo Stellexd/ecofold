@@ -53,6 +53,7 @@ func linuxView() gui.View {
 	s.GPU.Name, s.GPU.TempC, s.GPU.PowerUsageW, s.GPU.UsedVRAMMiB, s.GPU.TotalVRAMMiB = "NVIDIA GeForce RTX 5060", 61, 118, 812, 8151
 	s.Battery.OnAC = true
 	s.FAH.Reachable, s.FAH.ObservedAt = true, time.Now()
+	s.FAH.State, s.FAH.ActiveProjectID = "folding", 18264
 	s.PauseListSupported = true
 	s.PauseProcesses = []string{"blender", "obs*"}
 	s.UpdatedAt = time.Date(2026, 11, 16, 15, 4, 5, 0, time.Local)
@@ -67,7 +68,8 @@ func macView() gui.View {
 	s.Mode = gui.ModeFoldingEco
 	s.PowerCapable, s.PowerEnabled, s.CapApplied = false, false, false
 	s.EcoWatts = 0
-	s.GPU.Name = "Apple M4"
+	s.GPU.Name, s.GPU.TempC, s.GPU.PowerUsageW, s.GPU.UsedVRAMMiB, s.GPU.TotalVRAMMiB = "Apple M4", 0, 0, 0, 0
+	s.GPU.UtilPct, s.GPU.InUseMemMiB = 24, 1234
 	s.Battery.Present, s.Battery.OnAC, s.Battery.Pct = true, false, 53
 	s.PauseListSupported = false
 	s.PauseProcesses = nil
@@ -78,8 +80,11 @@ func TestPanelOnLinux(t *testing.T) {
 	p, _, _ := newTestPanel(t)
 	p.update(linuxView())
 
-	if p.mode.Text != "Folding" || p.fah.Text != "Folding@home: running" {
+	if p.mode.Text != "Folding" || p.fah.Text != "Folding@home: running (project #18264)" {
 		t.Fatalf("cabecera = %q / %q", p.mode.Text, p.fah.Text)
+	}
+	if p.gpuName.Text != "NVIDIA GeForce RTX 5060" || p.usage.Text != "Drawing 118 W · 61 °C · VRAM 812 / 8151 MiB" {
+		t.Fatalf("gpu = %q / %q", p.gpuName.Text, p.usage.Text)
 	}
 	if p.badge.Visible() || p.offline.Visible() || p.sessions.Visible() {
 		t.Fatal("badge, aviso offline o sesiones visibles sin motivo")
@@ -117,6 +122,23 @@ func TestPanelOnMac(t *testing.T) {
 	if p.ecoBox.Visible() {
 		t.Fatal("control de EcoWatts visible sin control de potencia")
 	}
+	if p.gpuName.Text != "Apple M4" || p.usage.Text != "GPU utilization: 24 % · In-use memory: 1234 MiB" {
+		t.Fatalf("gpu = %q / %q", p.gpuName.Text, p.usage.Text)
+	}
+	for _, fake := range []string{" W", "°C", "VRAM", "Mock"} {
+		if strings.Contains(p.usage.Text, fake) || strings.Contains(p.gpuName.Text, fake) {
+			t.Fatalf("dato simulado %q en el panel: %q / %q", fake, p.gpuName.Text, p.usage.Text)
+		}
+	}
+
+	// FAH not running: the header must not claim folding.
+	v := macView()
+	v.Status.FAH.Reachable = false
+	p.update(v)
+	if p.mode.Text != "Folding@home Not Reachable" || !strings.Contains(p.fah.Text, "not reachable") {
+		t.Fatalf("FAH caído: %q / %q", p.mode.Text, p.fah.Text)
+	}
+	p.update(macView())
 	if !strings.Contains(p.ecoNote.Text, "firmware") || !strings.Contains(p.power.Text, "firmware") {
 		t.Fatalf("falta la explicación del firmware: %q / %q", p.ecoNote.Text, p.power.Text)
 	}

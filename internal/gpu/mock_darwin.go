@@ -78,6 +78,7 @@ func (p *MockProvider) GetTelemetry() (Telemetry, error) {
 		UsedVRAMMiB:        p.usedVRAMMiB,
 		TotalVRAMMiB:       p.totalVRAMMiB,
 		SupportsPowerLimit: p.supportsPowerLimit,
+		Simulated:          true,
 	}, nil
 }
 

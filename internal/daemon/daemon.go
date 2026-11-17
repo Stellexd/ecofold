@@ -58,6 +58,10 @@ const (
 // logged. The same applies to failed FAH actions.
 const collectErrLogEvery = 30
 
+// fahRefreshTicks is how many ticks a FAH observation stays current before
+// the loop reads the status again (10 s at the default tick).
+const fahRefreshTicks = 5
+
 // Config holds the daemon's tunables. Zero durations are replaced by
 // DefaultConfig values.
 type Config struct {
@@ -175,6 +179,10 @@ type Daemon struct {
 	gpuStatus      GPUStatus
 	battery        BatteryStatus
 	fahStatus      FAHStatus
+	fahAge         int    // ticks since fahStatus was observed
+	gpuName        string // from the collector; published for a simulated GPU
+	gpuUtilPct     int
+	gpuInUseMemMiB int
 	sessions       []string
 	pauseMatches   []string
 }
@@ -222,6 +230,8 @@ func New(cfg Config, deps Deps) (*Daemon, error) {
 		stopping:  make(chan struct{}),
 		mode:      ModeStarting,
 		manual:    OverrideNone,
+		fahStatus: FAHStatus{State: fah.StateUnknown},
+		fahAge:    fahRefreshTicks, // read FAH on the first loop pass
 	}, nil
 }
 
@@ -347,6 +357,7 @@ func (d *Daemon) loop(ctx context.Context) (err error) {
 			return nil
 		}
 		d.tick(ctx)
+		d.refreshFAH(ctx)
 		d.publish()
 	wait:
 		for {
@@ -402,6 +413,11 @@ func (d *Daemon) tick(ctx context.Context) {
 		Pct:      snap.BatteryPct,
 	}
 	d.sessions, d.pauseMatches = snap.LiveGameSessions, snap.UserPauseMatches
+	d.gpuName = snap.GPUModel
+	if d.gpuName == "" {
+		d.gpuName = snap.GPUClass
+	}
+	d.gpuUtilPct, d.gpuInUseMemMiB = snap.GPUDeviceUtilPct, snap.GPUInUseMemMiB
 
 	d.apply(ctx, d.eval.Evaluate(snap))
 }
@@ -529,7 +545,11 @@ func (d *Daemon) runPending(ctx context.Context) {
 		op, call = "resume", d.fah.Resume
 	}
 	err := call(actx)
-	d.observeFAH(op == "pause", err)
+	if op == "pause" {
+		d.observeFAH(fah.Status{Paused: true, State: fah.StatePaused}, err)
+	} else {
+		d.observeFAH(fah.Status{State: fah.StateUnknown}, err)
+	}
 	if err != nil {
 		d.fahErrs++
 		if d.fahErrs == 1 || d.fahErrs%collectErrLogEvery == 0 {
@@ -540,6 +560,11 @@ func (d *Daemon) runPending(ctx context.Context) {
 	d.fahErrs = 0
 	d.pending = opNone
 
+	if op == "resume" {
+		// Resume does not say what FAH is doing now (folding or idle): the
+		// loop reads it on its next pass.
+		d.fahAge = fahRefreshTicks
+	}
 	if op == "pause" {
 		d.pausedByUs = true
 		if err := d.marker.set(); err != nil {

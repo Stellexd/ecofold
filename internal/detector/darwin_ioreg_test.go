@@ -145,6 +145,9 @@ func TestParseGPUIdleFixture(t *testing.T) {
 	if got.GPUClass != "AGXAcceleratorG16G" {
 		t.Errorf("GPUClass = %q, se esperaba %q", got.GPUClass, "AGXAcceleratorG16G")
 	}
+	if got.GPUModel != "Apple M4" {
+		t.Errorf("GPUModel = %q, se esperaba %q", got.GPUModel, "Apple M4")
+	}
 	if got.GPUDeviceUtilPct != 24 {
 		t.Errorf("GPUDeviceUtilPct = %d, se esperaba 24", got.GPUDeviceUtilPct)
 	}

@@ -26,6 +26,9 @@ type Telemetry struct {
 	UsedVRAMMiB        int
 	TotalVRAMMiB       int
 	SupportsPowerLimit bool
+	// Simulated reports that the values come from a mock, not from a device:
+	// they must not be shown to the user as real telemetry.
+	Simulated bool
 }
 
 // ProcessInfo describes a single process running on the GPU.
