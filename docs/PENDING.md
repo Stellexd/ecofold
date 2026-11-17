@@ -150,12 +150,17 @@ always stop folding.
     control panel was seen on Plasma: green dot, "running (project #18264)",
     the NVML usage line, the eco slider (range 123-145 W) and the pause list
     enabled.
-  - [ ] KDE Plasma (Wayland): the tray icon appears and changes color with the
-    mode, the menu works, and the window's X hides it instead of quitting.
+  - [x] KDE Plasma (Wayland), 2026-11-17: the tray icon appears, the menu
+    works, the window's X hides it instead of quitting, and Pause Folding
+    turns the icon gray, pauses FAH and restores 145 W.
+  - [ ] KDE Plasma: the icon turns blue during a game.
   - [ ] macOS: the menu bar icon and menu, and the control panel with the
     power control hidden and the pause list disabled.
-  - [ ] Against the real daemon: pause, resume (also during a game, to see
-    the `game_active` message), eco limit and pause list.
+  - [ ] Against the real daemon: resume (also during a game, to see the
+    `game_active` message), the eco limit applied while folding and the
+    pause list. On 2026-11-17 the eco limit was set to 130 W during a manual
+    pause: the daemon accepted it and correctly kept 145 W, so the applied
+    cap was not seen.
 - [x] **GUI showed misleading data** (seen on the real window on a MacBook Air
   M4, 2026-11-16). Fixed 2026-11-17 in
   `fix(gui,daemon): report real fah status and accurate macos gpu telemetry`.
