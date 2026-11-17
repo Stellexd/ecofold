@@ -186,6 +186,17 @@ always stop folding.
   Leaderboard" opt-in is stored in the local preferences and sends nothing:
   `ecofold-web` does not exist yet. Only seen on Fyne's software driver;
   look at it on Plasma and macOS.
+- [x] **Header contradicted the FAH line** (seen on macOS, 2026-11-17:
+  "Folding (on battery)" in green over "paused by EcoFold"). While the mode
+  allows folding the header now follows FAH: "Resuming Folding…" for the
+  daemon's own pause, "Paused in Folding@home" for the user's, "Idle (Waiting
+  for Work Unit)" without a work unit; all gray.
+- [x] **Contribution counters.** The daemon publishes `folding_seconds` and
+  `projects_contributed` for its current run (memory only), and the
+  leaderboard card shows "Session compute time". The GUI keeps a random
+  `client_uuid` in its preferences. Still nothing is sent anywhere.
+  - [ ] Persist the totals across daemon restarts if the leaderboard needs
+    lifetime figures.
 - [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
   with an XDG autostart entry / a LaunchAgent), and an application icon and
   bundle for macOS.

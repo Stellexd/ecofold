@@ -190,6 +190,8 @@ again.
   "pause_list_supported": true,
   "pause_processes": ["blender"],
   "pause_matches": [],
+  "folding_seconds": 5025,
+  "projects_contributed": [18264],
   "updated_at": "2026-11-16T02:13:01-03:00"
 }
 ```
@@ -210,6 +212,12 @@ again.
   (not paused, no work unit running) or `unknown`; `active_project_id` is 0
   when no work unit is running. With `reachable` false the other fields are
   the last known values.
+- `folding_seconds` is the time FAH was seen running a work unit (reachable,
+  not paused, `state` `folding`) since the daemon started, and
+  `projects_contributed` the projects of those work units in the order they
+  were first seen (at most 256). Both live in memory and start again with
+  the daemon. A loop pass adds at most 3 ticks, so a suspended machine is not
+  counted.
 - `gpu`: with a simulated provider (macOS, the Linux stub) `temp_c`,
   `power_usage_w` and the VRAM fields are 0, and `name` comes from the
   collector (`Apple M4`). `util_pct` and `in_use_mem_mib` are the device-wide

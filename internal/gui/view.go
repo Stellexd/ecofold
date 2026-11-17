@@ -7,6 +7,7 @@
 package gui
 
 import (
+	"crypto/rand"
 	"fmt"
 	"strings"
 	"time"
@@ -53,11 +54,14 @@ type Status struct {
 		ObservedAt      time.Time `json:"observed_at"`
 	} `json:"fah"`
 
-	GameSessions       []string  `json:"game_sessions"`
-	PauseListSupported bool      `json:"pause_list_supported"`
-	PauseProcesses     []string  `json:"pause_processes"`
-	PauseMatches       []string  `json:"pause_matches"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	GameSessions       []string `json:"game_sessions"`
+	PauseListSupported bool     `json:"pause_list_supported"`
+	PauseProcesses     []string `json:"pause_processes"`
+	PauseMatches       []string `json:"pause_matches"`
+	// FoldingSeconds and ProjectsContributed count this run of the daemon.
+	FoldingSeconds      int64     `json:"folding_seconds"`
+	ProjectsContributed []int     `json:"projects_contributed"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // Daemon modes and overrides, as they appear in Status.
@@ -122,7 +126,8 @@ func (v View) Tone() Tone {
 	}
 	switch v.Status.Mode {
 	case ModeFolding, ModeFoldingEco:
-		if v.fahUnreachable() {
+		// Green means work is being done, not that it is allowed.
+		if _, stalled := v.foldingStall(); stalled {
 			return ToneGray
 		}
 		return ToneGreen
@@ -142,9 +147,9 @@ func (v View) ModeLabel() string {
 	}
 	switch v.Status.Mode {
 	case ModeFolding, ModeFoldingEco:
-		// The mode is the daemon's decision; without FAH nothing is folding.
-		if v.fahUnreachable() {
-			return "Folding@home Not Reachable"
+		// The mode is the daemon's decision; what FAH does with it may differ.
+		if label, stalled := v.foldingStall(); stalled {
+			return label
 		}
 		if v.Status.Mode == ModeFoldingEco {
 			return "Folding (on battery)"
@@ -205,6 +210,55 @@ func (v View) ToggleLabel() string {
 func (v View) fahUnreachable() bool {
 	f := v.Status.FAH
 	return !f.ObservedAt.IsZero() && !f.Reachable
+}
+
+// foldingStall reports, for a mode that allows folding, why Folding@home is
+// not actually running a work unit, in words.
+func (v View) foldingStall() (label string, stalled bool) {
+	f := v.Status.FAH
+	switch {
+	case v.fahUnreachable():
+		return "Folding@home Not Reachable", true
+	case !f.Reachable:
+		return "", false // not asked yet
+	case f.Paused && v.Status.PausedByUs:
+		// The daemon's own pause, about to be lifted (startup hold, or the
+		// resume has not gone through yet).
+		return "Resuming Folding…", true
+	case f.Paused:
+		return "Paused in Folding@home", true
+	case f.State == FAHStateIdle:
+		return "Idle (Waiting for Work Unit)", true
+	}
+	return "", false
+}
+
+// ComputeTimeLabel is the time folded since the daemon started, and the
+// number of projects it went to.
+func (v View) ComputeTimeLabel() string {
+	if !v.Connected {
+		return "Session compute time: —"
+	}
+	secs := v.Status.FoldingSeconds
+	label := fmt.Sprintf("Session compute time: %dh %dm", secs/3600, secs%3600/60)
+	switch n := len(v.Status.ProjectsContributed); n {
+	case 0:
+		return label
+	case 1:
+		return label + " · 1 project"
+	default:
+		return fmt.Sprintf("%s · %d projects", label, n)
+	}
+}
+
+// NewClientUUID returns a random (version 4) UUID. It identifies this
+// install on the leaderboard without an account.
+func NewClientUUID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:]) // never fails
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // FAHLabel describes what the daemon last saw of Folding@home.

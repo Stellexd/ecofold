@@ -62,6 +62,14 @@ const collectErrLogEvery = 30
 // the loop reads the status again (10 s at the default tick).
 const fahRefreshTicks = 5
 
+const (
+	// maxAccountedTicks caps, in ticks, the time one loop pass adds to the
+	// folding total.
+	maxAccountedTicks = 3
+	// maxProjects caps Status.ProjectsContributed.
+	maxProjects = 256
+)
+
 // Config holds the daemon's tunables. Zero durations are replaced by
 // DefaultConfig values.
 type Config struct {
@@ -185,6 +193,11 @@ type Daemon struct {
 	gpuInUseMemMiB int
 	sessions       []string
 	pauseMatches   []string
+
+	// Contribution of this run, for Status. See accountFolding.
+	foldingTime time.Duration
+	projects    []int
+	accountedAt time.Time // previous accountFolding call; zero before the first
 }
 
 // New validates cfg and deps and returns a Daemon. It does not touch the
@@ -358,6 +371,7 @@ func (d *Daemon) loop(ctx context.Context) (err error) {
 		}
 		d.tick(ctx)
 		d.refreshFAH(ctx)
+		d.accountFolding(time.Now())
 		d.publish()
 	wait:
 		for {

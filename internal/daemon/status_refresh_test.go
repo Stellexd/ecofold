@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/Stellexd/ecofold/internal/detector"
 	"github.com/Stellexd/ecofold/internal/fah"
@@ -125,5 +127,63 @@ func TestStatusKeepsRealTelemetry(t *testing.T) {
 	want := GPUStatus{Name: "Fake RTX 5060", TempC: 61, PowerUsageW: 118, UsedVRAMMiB: 812, TotalVRAMMiB: 8151}
 	if got := h.d.publish().GPU; got != want {
 		t.Fatalf("gpu = %+v, se esperaba %+v", got, want)
+	}
+}
+
+// TestFoldingIsAccounted: only the time FAH was seen running a work unit
+// counts, with its projects, and a stalled loop is not counted as work.
+func TestFoldingIsAccounted(t *testing.T) {
+	h := newHarness(t, true)
+	h.start(t)
+	ctx := context.Background()
+	tick := h.d.cfg.Tick
+	now := time.Unix(1_800_000_000, 0)
+	pass := func(step time.Duration) Status {
+		now = now.Add(step)
+		h.d.accountFolding(now)
+		return h.d.publish()
+	}
+
+	// FAH not asked yet: nothing counts.
+	if st := pass(tick); st.FoldingSeconds != 0 || st.ProjectsContributed == nil || len(st.ProjectsContributed) != 0 {
+		t.Fatalf("sin observar FAH: %d s, %v", st.FoldingSeconds, st.ProjectsContributed)
+	}
+
+	h.d.refreshFAH(ctx) // folding project 18264
+	for done := time.Duration(0); done < 10*time.Second; done += tick {
+		pass(tick)
+	}
+	st := h.d.publish()
+	if st.FoldingSeconds != 10 || !slices.Equal(st.ProjectsContributed, []int{18264}) {
+		t.Fatalf("plegando: %d s, %v", st.FoldingSeconds, st.ProjectsContributed)
+	}
+
+	// Paused, idle and unreachable add nothing.
+	for name, edit := range map[string]func(f *fakeFAH){
+		"pausado": func(f *fakeFAH) { f.status = fah.Status{Paused: true, State: fah.StatePaused} },
+		"idle":    func(f *fakeFAH) { f.status = fah.Status{State: fah.StateIdle} },
+		"caído":   func(f *fakeFAH) { f.statusErr = errors.New("connection refused") },
+	} {
+		h.fah.set(edit)
+		_, _ = h.d.readFAH(ctx)
+		if st := pass(time.Minute); st.FoldingSeconds != 10 {
+			t.Fatalf("%s: %d s", name, st.FoldingSeconds)
+		}
+		h.fah.set(func(f *fakeFAH) { f.statusErr = nil })
+	}
+
+	// A second project; the first pass after the gap is capped.
+	h.fah.set(func(f *fakeFAH) { f.status = fah.Status{State: fah.StateFolding, ActiveProjectID: 16969} })
+	_, _ = h.d.readFAH(ctx)
+	st = pass(time.Hour) // the machine slept
+	want := int64(10 + maxAccountedTicks*tick/time.Second)
+	if st.FoldingSeconds != want || !slices.Equal(st.ProjectsContributed, []int{18264, 16969}) {
+		t.Fatalf("tras la suspensión: %d s (se esperaba %d), %v", st.FoldingSeconds, want, st.ProjectsContributed)
+	}
+
+	// The published slice is a copy.
+	st.ProjectsContributed[0] = 1
+	if got := h.d.Status().ProjectsContributed; got[0] != 18264 {
+		t.Fatalf("el snapshot comparte memoria con el daemon: %v", got)
 	}
 }

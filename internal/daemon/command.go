@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -112,6 +113,13 @@ type Status struct {
 	PauseProcesses []string `json:"pause_processes"`
 	PauseMatches   []string `json:"pause_matches"`
 
+	// FoldingSeconds is the time Folding@home was seen running a work unit
+	// since the daemon started, and ProjectsContributed the projects of
+	// those work units, in the order they were first seen. Both are kept in
+	// memory only and start again with the daemon.
+	FoldingSeconds      int64 `json:"folding_seconds"`
+	ProjectsContributed []int `json:"projects_contributed"`
+
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
@@ -159,6 +167,7 @@ func (s Status) clone() Status {
 	s.GameSessions = append([]string{}, s.GameSessions...)
 	s.PauseProcesses = append([]string{}, s.PauseProcesses...)
 	s.PauseMatches = append([]string{}, s.PauseMatches...)
+	s.ProjectsContributed = append([]int{}, s.ProjectsContributed...)
 	return s
 }
 
@@ -190,26 +199,28 @@ func (d *Daemon) publish() Status {
 	}
 	d.gpuStatus.UtilPct, d.gpuStatus.InUseMemMiB = d.gpuUtilPct, d.gpuInUseMemMiB
 	st := Status{
-		Mode:               d.mode,
-		ManualOverride:     d.manual,
-		PausedByUs:         d.pausedByUs,
-		Degraded:           d.degraded,
-		PowerCapable:       d.powerCapable,
-		PowerEnabled:       d.powerEnabled,
-		CapApplied:         d.capApplied,
-		PowerLimitW:        d.powerLimitW,
-		DefaultPowerLimitW: d.defaultW,
-		MinPowerLimitW:     d.minW,
-		MaxPowerLimitW:     d.maxW,
-		EcoWatts:           d.ecoWatts,
-		GPU:                d.gpuStatus,
-		Battery:            d.battery,
-		FAH:                d.fahStatus,
-		GameSessions:       d.sessions,
-		PauseListSupported: d.pauseListSupported(),
-		PauseProcesses:     d.pauseProcesses,
-		PauseMatches:       d.pauseMatches,
-		UpdatedAt:          time.Now(),
+		Mode:                d.mode,
+		ManualOverride:      d.manual,
+		PausedByUs:          d.pausedByUs,
+		Degraded:            d.degraded,
+		PowerCapable:        d.powerCapable,
+		PowerEnabled:        d.powerEnabled,
+		CapApplied:          d.capApplied,
+		PowerLimitW:         d.powerLimitW,
+		DefaultPowerLimitW:  d.defaultW,
+		MinPowerLimitW:      d.minW,
+		MaxPowerLimitW:      d.maxW,
+		EcoWatts:            d.ecoWatts,
+		GPU:                 d.gpuStatus,
+		Battery:             d.battery,
+		FAH:                 d.fahStatus,
+		GameSessions:        d.sessions,
+		PauseListSupported:  d.pauseListSupported(),
+		PauseProcesses:      d.pauseProcesses,
+		PauseMatches:        d.pauseMatches,
+		FoldingSeconds:      int64(d.foldingTime / time.Second),
+		ProjectsContributed: d.projects,
+		UpdatedAt:           time.Now(),
 	}.clone()
 	d.status.Store(&st)
 	return st.clone()
@@ -533,5 +544,25 @@ func (d *Daemon) observeFAH(st fah.Status, err error) {
 		d.fahStatus.Paused = st.Paused
 		d.fahStatus.State = st.State
 		d.fahStatus.ActiveProjectID = st.ActiveProjectID
+	}
+}
+
+// accountFolding adds the time since the previous loop pass to the folding
+// total when Folding@home was last seen running a work unit, and records its
+// project. A paused, idle or unreachable FAH adds nothing. The step is
+// capped, so a stalled loop or a suspended machine is not counted as work.
+// Loop goroutine only.
+func (d *Daemon) accountFolding(now time.Time) {
+	last := d.accountedAt
+	d.accountedAt = now
+	f := d.fahStatus
+	if !f.Reachable || f.Paused || f.State != fah.StateFolding {
+		return
+	}
+	if step := now.Sub(last); !last.IsZero() && step > 0 {
+		d.foldingTime += min(step, maxAccountedTicks*d.cfg.Tick)
+	}
+	if id := f.ActiveProjectID; id > 0 && !slices.Contains(d.projects, id) && len(d.projects) < maxProjects {
+		d.projects = append(d.projects, id)
 	}
 }

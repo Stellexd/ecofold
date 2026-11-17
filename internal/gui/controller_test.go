@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -551,11 +552,13 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 		Battery: daemon.BatteryStatus{Present: true, OnAC: true, Charging: true, Pct: 77},
 		FAH: daemon.FAHStatus{Paused: true, State: fah.StatePaused, ActiveProjectID: 18264, Reachable: true,
 			ObservedAt: time.Unix(1700000000, 0)},
-		GameSessions:       []string{"steam:1"},
-		PauseListSupported: true,
-		PauseProcesses:     []string{"blender"},
-		PauseMatches:       []string{"blender"},
-		UpdatedAt:          time.Unix(1700000001, 0),
+		GameSessions:        []string{"steam:1"},
+		PauseListSupported:  true,
+		PauseProcesses:      []string{"blender"},
+		PauseMatches:        []string{"blender"},
+		FoldingSeconds:      5025,
+		ProjectsContributed: []int{18264, 16969},
+		UpdatedAt:           time.Unix(1700000001, 0),
 	}
 	raw, err := json.Marshal(src)
 	if err != nil {
@@ -574,6 +577,9 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 	if string(back) != string(raw) {
 		t.Fatalf("el status no sobrevive el viaje de ida y vuelta:\ndaemon  %s\ncliente %s", raw, back)
 	}
+	if got.FoldingSeconds != 5025 || len(got.ProjectsContributed) != 2 || got.ProjectsContributed[1] != 16969 {
+		t.Fatalf("aporte = %d s, %v", got.FoldingSeconds, got.ProjectsContributed)
+	}
 	if got.Mode != ModePausedManual || got.ManualOverride != OverridePause {
 		t.Fatalf("constantes desalineadas: %q / %q", got.Mode, got.ManualOverride)
 	}
@@ -588,6 +594,61 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 		if client != string(server) {
 			t.Errorf("modo del cliente %q, del daemon %q", client, server)
 		}
+	}
+}
+
+// TestHeaderDoesNotClaimFoldingWhilePaused: the daemon allows folding
+// (folding_eco) but its own FAH pause is still in place, as during the
+// startup hold. The header must not say "Folding" in green over a line that
+// says "paused by EcoFold".
+func TestHeaderDoesNotClaimFoldingWhilePaused(t *testing.T) {
+	for _, mode := range []string{ModeFolding, ModeFoldingEco} {
+		v := View{Connected: true}
+		s := &v.Status
+		s.Mode, s.ManualOverride, s.PausedByUs = mode, "none", true
+		s.FAH.Reachable, s.FAH.Paused, s.FAH.State, s.FAH.ObservedAt = true, true, "paused", time.Now()
+
+		if v.Tone() == ToneGreen {
+			t.Errorf("%s con FAH en pausa: tono verde", mode)
+		}
+		for _, text := range []string{v.ModeLabel(), v.Headline()} {
+			if strings.Contains(text, "Folding (") || strings.HasPrefix(text, "Folding —") || text == "Folding" {
+				t.Errorf("%s con FAH en pausa: %q", mode, text)
+			}
+		}
+		if v.ModeLabel() != "Resuming Folding…" || v.FAHLabel() != "Folding@home: paused by EcoFold" {
+			t.Errorf("%s: %q / %q", mode, v.ModeLabel(), v.FAHLabel())
+		}
+
+		// FAH leaves the pause: now it is folding.
+		s.PausedByUs, s.FAH.Paused, s.FAH.State = false, false, "folding"
+		if v.Tone() != ToneGreen || !strings.HasPrefix(v.ModeLabel(), "Folding") {
+			t.Errorf("%s tras reanudar: %s / %q", mode, v.Tone().Name(), v.ModeLabel())
+		}
+	}
+}
+
+func TestContributionLabels(t *testing.T) {
+	v := View{Connected: true}
+	if got := v.ComputeTimeLabel(); got != "Session compute time: 0h 0m" {
+		t.Errorf("sin aporte = %q", got)
+	}
+	v.Status.FoldingSeconds, v.Status.ProjectsContributed = 5025, []int{18264}
+	if got := v.ComputeTimeLabel(); got != "Session compute time: 1h 23m · 1 project" {
+		t.Errorf("aporte = %q", got)
+	}
+	v.Status.FoldingSeconds, v.Status.ProjectsContributed = 100*3600+59, []int{1, 2, 3}
+	if got := v.ComputeTimeLabel(); got != "Session compute time: 100h 0m · 3 projects" {
+		t.Errorf("aporte largo = %q", got)
+	}
+	if got := (View{}).ComputeTimeLabel(); got != "Session compute time: —" {
+		t.Errorf("sin daemon = %q", got)
+	}
+
+	uuid := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	a, b := NewClientUUID(), NewClientUUID()
+	if !uuid.MatchString(a) || !uuid.MatchString(b) || a == b {
+		t.Errorf("uuid = %q / %q", a, b)
 	}
 }
 
@@ -618,7 +679,11 @@ func TestViewLabels(t *testing.T) {
 		{"manual durante un juego", mk(ModePausedLoad, func(s *Status) { s.ManualOverride, s.PowerLimitW = OverridePause, 145 }),
 			ToneBlue, "Paused (Game) — 145 W", "Resume Folding"},
 		{"pausa del usuario en FAH", mk(ModeFolding, func(s *Status) { s.FAH.Paused, s.FAH.Reachable = true, true }),
-			ToneGreen, "Folding — 123 W", "Resume Folding"},
+			ToneGray, "Paused in Folding@home — 123 W", "Resume Folding"},
+		{"idle", mk(ModeFolding, func(s *Status) { s.FAH.Reachable, s.FAH.State = true, FAHStateIdle }),
+			ToneGray, "Idle (Waiting for Work Unit) — 123 W", "Pause Folding"},
+		{"plegando de verdad", mk(ModeFoldingEco, func(s *Status) { s.PowerCapable, s.FAH.Reachable, s.FAH.State = false, true, "folding" }),
+			ToneGreen, "Folding (on battery)", "Pause Folding"},
 		{"FAH caído", mk(ModeFolding, func(s *Status) { s.FAH.ObservedAt = time.Now() }),
 			ToneGray, "Folding@home Not Reachable — 123 W", "Pause Folding"},
 		{"FAH caído en batería", mk(ModeFoldingEco, func(s *Status) { s.PowerCapable, s.FAH.ObservedAt = false, time.Now() }),

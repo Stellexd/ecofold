@@ -42,6 +42,7 @@ var boincEngines = []struct{ option, name string }{
 const (
 	prefShareStats  = "leaderboard.share_stats"
 	prefPublicAlias = "leaderboard.public_alias"
+	prefClientUUID  = "client_uuid"
 )
 
 // metricTile is one cell of the GPU grid: a caption over a figure.
@@ -106,6 +107,7 @@ type panel struct {
 	pauseNote  *widget.Label
 	matches    *widget.Label
 
+	compute    *widget.Label
 	shareCheck *widget.Check
 	aliasEntry *widget.Entry
 
@@ -261,6 +263,10 @@ func newPanel(act actions) *panel {
 	// The opt-in is off until the user ticks it (Zero-Login) and lives only
 	// in this user's preferences.
 	prefs := fyne.CurrentApp().Preferences()
+	if prefs.String(prefClientUUID) == "" {
+		prefs.SetString(prefClientUUID, gui.NewClientUUID())
+	}
+	p.compute = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	p.aliasEntry = widget.NewEntry()
 	p.aliasEntry.SetPlaceHolder("Public Alias (optional)")
 	p.aliasEntry.SetText(prefs.String(prefPublicAlias))
@@ -276,14 +282,14 @@ func newPanel(act actions) *panel {
 	boardNote.Wrapping = fyne.TextWrapWord
 	boardNote.Importance = widget.LowImportance
 	boardCard := widget.NewCard("Community Leaderboard (Opt-in)", "",
-		container.NewVBox(p.shareCheck, p.aliasEntry, boardNote))
+		container.NewVBox(p.compute, p.shareCheck, p.aliasEntry, boardNote))
 
 	p.message = widget.NewLabel("")
 	p.message.Wrapping = fyne.TextWrapWord
 	p.updated = widget.NewLabel("")
 	statusBar := container.NewBorder(widget.NewSeparator(), nil, nil, p.updated, p.message)
 
-	body := container.NewVBox(header, impactCard, gpuCard, p.batteryCard, pauseCard, boardCard, layout.NewSpacer())
+	body := container.NewVBox(header, impactCard, boardCard, gpuCard, p.batteryCard, pauseCard, layout.NewSpacer())
 	p.root = container.NewBorder(nil, statusBar, nil, nil, container.NewPadded(container.NewVScroll(body)))
 	p.boxes = []*fyne.Container{p.projBox, impactBox, ecoRight, p.ecoBox, p.grid, gpuBox, pauseBox, header, body, statusBar}
 	return p
@@ -370,6 +376,9 @@ func (p *panel) update(v gui.View) {
 		}
 		p.ecoSlide.Refresh()
 	}
+
+	// Leaderboard.
+	p.compute.SetText(v.ComputeTimeLabel())
 
 	// Battery.
 	show(p.batteryCard, on && s.Battery.Present)

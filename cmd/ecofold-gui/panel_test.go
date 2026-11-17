@@ -56,6 +56,7 @@ func linuxView() gui.View {
 	s.Battery.OnAC = true
 	s.FAH.Reachable, s.FAH.ObservedAt = true, time.Now()
 	s.FAH.State, s.FAH.ActiveProjectID = "folding", 18264
+	s.FoldingSeconds, s.ProjectsContributed = 5025, []int{18264}
 	s.PauseListSupported = true
 	s.PauseProcesses = []string{"blender", "obs*"}
 	s.UpdatedAt = time.Date(2026, 11, 16, 15, 4, 5, 0, time.Local)
@@ -180,6 +181,16 @@ func TestPanelStates(t *testing.T) {
 	if !p.badge.Visible() || p.mode.Text != "Paused (Manual)" || p.fah.Text != "Folding@home: paused by EcoFold" {
 		t.Fatalf("pausa manual: badge=%v modo=%q fah=%q", p.badge.Visible(), p.mode.Text, p.fah.Text)
 	}
+
+	// Folding allowed again, the daemon's pause not lifted yet: no green
+	// "Folding" over "paused by EcoFold".
+	v.Status.Mode, v.Status.ManualOverride = gui.ModeFoldingEco, "none"
+	p.update(v)
+	if p.mode.Text != "Resuming Folding…" || p.dot.FillColor != gui.ToneGray.Color() {
+		t.Fatalf("reanudando: modo=%q", p.mode.Text)
+	}
+	v.Status.Mode, v.Status.ManualOverride = gui.ModePausedManual, gui.OverridePause
+	p.update(v)
 	if !p.pauseBtn.Disabled() || p.resume.Disabled() {
 		t.Fatal("con pausa manual se esperaba Pause deshabilitado y Resume habilitado")
 	}
@@ -323,6 +334,14 @@ func TestPanelLeaderboardOptIn(t *testing.T) {
 	if p.shareCheck.Checked || !p.aliasEntry.Disabled() || prefs.Bool(prefShareStats) {
 		t.Fatal("el ranking no está desactivado por defecto")
 	}
+	id := prefs.String(prefClientUUID)
+	if len(id) != 36 || id[14] != '4' {
+		t.Fatalf("client_uuid = %q", id)
+	}
+	p.update(linuxView())
+	if p.compute.Text != "Session compute time: 1h 23m · 1 project" {
+		t.Fatalf("tiempo = %q", p.compute.Text)
+	}
 	if p.shareCheck.Text != "Share anonymous compute stats on the Global Leaderboard" ||
 		p.aliasEntry.PlaceHolder != "Public Alias (optional)" {
 		t.Fatalf("textos = %q / %q", p.shareCheck.Text, p.aliasEntry.PlaceHolder)
@@ -344,6 +363,9 @@ func TestPanelLeaderboardOptIn(t *testing.T) {
 
 	// A new panel on the same app: the choice is restored.
 	again := newPanel((&recorder{}).actions())
+	if got := prefs.String(prefClientUUID); got != id {
+		t.Fatalf("client_uuid cambió: %q -> %q", id, got)
+	}
 	if !again.shareCheck.Checked || again.aliasEntry.Disabled() || again.aliasEntry.Text != "stellex" {
 		t.Fatalf("al reabrir: check=%v alias=%q", again.shareCheck.Checked, again.aliasEntry.Text)
 	}
