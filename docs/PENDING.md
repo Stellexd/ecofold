@@ -136,11 +136,18 @@ always stop folding.
   software driver; the real binary was only launched on macOS for a few
   seconds (it started, connected to a mock daemon and survived the daemon
   stopping). Nobody has looked at the real window or tray yet.
-  - [ ] CachyOS: `make build-gui` with cgo (never built on Linux: the machine
-    was unreachable), then `go test -race ./...`.
-  - [ ] CachyOS: reinstall the daemon first. The installed build (`933170e`)
-    predates `pause_list_supported`, so the GUI would show the pause list as
-    unavailable.
+  - [x] CachyOS: `make build` with cgo and `go test -race ./...` pass
+    (2026-11-17, commit `19a276c`, Go 1.27.4). Run as the normal user for a
+    few seconds, the new daemon reported the real FAH state (`folding`,
+    project 18264) without pausing, and the NVML telemetry. `ecofold-gui
+    -hidden` started in the Plasma Wayland session, registered its
+    StatusNotifierItem and exited cleanly on SIGINT. Nobody looked at it:
+    the visual checks below are still open. It used about 250 MiB of RSS
+    while hidden; measure it properly against the "minimal footprint" rule.
+  - [ ] CachyOS: reinstall the daemon first (needs `sudo`, so it was not done
+    over SSH). The installed build (`933170e`) predates `pause_list_supported`
+    and the new `fah` and `gpu` fields, so the GUI would show the pause list
+    as unavailable and no project.
   - [ ] KDE Plasma (Wayland): the tray icon appears and changes color with the
     mode, the menu works, and the window's X hides it instead of quitting.
   - [ ] macOS: the menu bar icon and menu, and the control panel with the
