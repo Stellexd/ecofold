@@ -51,6 +51,7 @@ type Status struct {
 		Paused          bool      `json:"paused"`
 		State           string    `json:"state"`
 		ActiveProjectID int       `json:"active_project_id"`
+		CPUs            int       `json:"cpus"`
 		Reachable       bool      `json:"reachable"`
 		ObservedAt      time.Time `json:"observed_at"`
 	} `json:"fah"`

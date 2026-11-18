@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -95,7 +96,11 @@ func run() int {
 
 	var ctrl fah.Controller
 	if *fahMock {
-		ctrl = fah.NewMockController(0)
+		m := fah.NewMockController(0)
+		// Report a cpus value, as a real client does, so the macOS CPU
+		// budget can be recorded and applied.
+		_ = m.SetCPUs(context.Background(), runtime.NumCPU())
+		ctrl = m
 	} else {
 		c, err := fah.NewClientV8(*fahEndpoint)
 		if err != nil {

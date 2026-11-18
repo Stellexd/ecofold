@@ -169,6 +169,8 @@ type FAHStatus struct {
 	State string `json:"state"`
 	// ActiveProjectID is the project of the running work unit, or 0.
 	ActiveProjectID int `json:"active_project_id"`
+	// CPUs is FAH's "cpus" option (default group); 0 when not reported.
+	CPUs int `json:"cpus"`
 	// Reachable is false when the last call failed; the fields above then
 	// hold the last known values.
 	Reachable bool `json:"reachable"`
@@ -465,6 +467,9 @@ func (d *Daemon) forceResume(ctx context.Context) error {
 	if d.powerEnabled && !d.applyCap() {
 		return fmt.Errorf("%w: folding stays paused", ErrCapFailed)
 	}
+	if !d.ensureCPUs(ctx) {
+		return fmt.Errorf("%w: could not limit its cpu threads, folding stays paused", ErrFAHUnavailable)
+	}
 
 	if st, err := d.readFAH(ctx); err == nil && !st.Paused {
 		d.pending = opNone
@@ -607,6 +612,13 @@ func (d *Daemon) observeFAH(st fah.Status, err error) {
 		d.fahStatus.Paused = st.Paused
 		d.fahStatus.State = st.State
 		d.fahStatus.ActiveProjectID = st.ActiveProjectID
+		if st.CPUs > 0 {
+			d.fahStatus.CPUs = st.CPUs
+			if d.cpusApplied > 0 && st.CPUs != d.cpusApplied {
+				// Changed outside EcoFold: apply the budget again.
+				d.cpusApplied = 0
+			}
+		}
 	}
 }
 
