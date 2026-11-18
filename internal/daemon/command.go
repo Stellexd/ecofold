@@ -403,8 +403,12 @@ func (d *Daemon) forcePause(ctx context.Context) error {
 	d.restoreIfCapped()
 
 	if st, err := d.readFAH(ctx); err == nil && st.Paused {
-		// Already paused: ours stays ours, the user's stays the user's.
+		// Already paused: ours stays ours, the user's stays the user's. Our
+		// own pause becomes manual, so a restart keeps it.
 		d.pending = opNone
+		if d.pausedByUs {
+			d.writeMarker()
+		}
 	} else {
 		d.pending = opPause
 		d.runPending(ctx)
@@ -424,8 +428,13 @@ func (d *Daemon) forcePause(ctx context.Context) error {
 func (d *Daemon) forceResume(ctx context.Context) error {
 	if d.manual != OverrideNone {
 		d.log.Info("manual pause cleared")
+		d.manual = OverrideNone
+		if d.pausedByUs {
+			// What is left is an automatic pause: a restart before the
+			// resume lands must resume it, not keep it as manual.
+			d.writeMarker()
+		}
 	}
-	d.manual = OverrideNone
 	if !d.degraded {
 		if !d.haveDecision {
 			d.mode = ModeStarting

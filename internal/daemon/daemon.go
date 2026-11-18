@@ -326,12 +326,18 @@ func (d *Daemon) start() error {
 		}
 	}
 
-	owned, err := d.marker.present()
+	origin, owned, err := d.marker.read()
 	if err != nil {
 		d.log.Warn("could not read the pause marker; assuming the current pause is not ours", "err", err)
 	}
 	d.pausedByUs = owned
-	if owned {
+	switch {
+	case owned && origin == originManual:
+		// The user's ForcePause outlives the restart: no startup hold, and
+		// nothing resumes until ForceResume.
+		d.manual = OverridePause
+		d.mode = ModePausedManual
+	case owned:
 		d.resumeHold = d.cfg.StartupHoldTicks
 	}
 
@@ -350,6 +356,7 @@ func (d *Daemon) start() error {
 		"power_limit_supported", d.powerCapable,
 		"eco_watts", d.ecoWatts,
 		"paused_by_daemon", d.pausedByUs,
+		"manual_pause", d.manual == OverridePause,
 		"tick", d.cfg.Tick)
 	return nil
 }
@@ -582,9 +589,7 @@ func (d *Daemon) runPending(ctx context.Context) {
 	}
 	if op == "pause" {
 		d.pausedByUs = true
-		if err := d.marker.set(); err != nil {
-			d.log.Warn("could not write the pause marker", "err", err)
-		}
+		d.writeMarker()
 		d.log.Info("folding paused")
 		return
 	}
@@ -593,6 +598,18 @@ func (d *Daemon) runPending(ctx context.Context) {
 		d.log.Warn("could not remove the pause marker", "err", err)
 	}
 	d.log.Info("folding resumed")
+}
+
+// writeMarker records the daemon's pause with its origin: manual while the
+// override is set, so a manual pause is never downgraded to auto.
+func (d *Daemon) writeMarker() {
+	origin := originAuto
+	if d.manual == OverridePause {
+		origin = originManual
+	}
+	if err := d.marker.set(origin); err != nil {
+		d.log.Warn("could not write the pause marker", "err", err)
+	}
 }
 
 // failSafe restores the default power limit within RestoreTimeout and

@@ -21,7 +21,7 @@ func TestChaosMarkerSymlinkIsReplacedNotFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := m.set(); err != nil {
+	if err := m.set(originAuto); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	if fi, err := os.Lstat(m.path()); err != nil || fi.Mode()&os.ModeSymlink != 0 {
@@ -52,7 +52,7 @@ func TestChaosMarkerRuntimeDirIsAFile(t *testing.T) {
 	if ok, err := m.present(); ok || err == nil {
 		t.Fatalf("present = %v, %v; se esperaba false con error", ok, err)
 	}
-	if err := m.set(); err == nil {
+	if err := m.set(originAuto); err == nil {
 		t.Fatal("set debía fallar")
 	}
 
@@ -87,7 +87,7 @@ func TestChaosMarkerIsADirectory(t *testing.T) {
 	if ok, _ := m.present(); !ok {
 		t.Fatal("un directorio en la ruta del marcador debe contar como presente")
 	}
-	if err := m.set(); err == nil {
+	if err := m.set(originAuto); err == nil {
 		t.Fatal("set sobre un directorio no vacío debía fallar")
 	}
 	if err := m.clear(); err == nil {
@@ -125,7 +125,7 @@ func TestChaosMarkerReadOnlyDir(t *testing.T) {
 		t.Fatal("falta el aviso de marcador no escribible")
 	}
 	var pe *os.PathError
-	if err := h.d.marker.set(); !errors.As(err, &pe) {
+	if err := h.d.marker.set(originAuto); !errors.As(err, &pe) {
 		t.Fatalf("err = %v, se esperaba *os.PathError", err)
 	}
 }
