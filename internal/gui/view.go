@@ -20,6 +20,7 @@ type Status struct {
 	Mode           string `json:"mode"`
 	ManualOverride string `json:"manual_override"`
 	PausedByUs     bool   `json:"paused_by_us"`
+	StartupHold    bool   `json:"startup_hold"`
 	Degraded       bool   `json:"degraded"`
 
 	PowerCapable       bool `json:"power_capable"`

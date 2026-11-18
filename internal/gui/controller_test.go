@@ -544,7 +544,8 @@ func TestConcurrentUse(t *testing.T) {
 // daemon publishes must decode into the client's Status.
 func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 	src := daemon.Status{
-		Mode: daemon.ModePausedManual, ManualOverride: daemon.OverridePause, PausedByUs: true, Degraded: true,
+		Mode: daemon.ModePausedManual, ManualOverride: daemon.OverridePause, PausedByUs: true, StartupHold: true,
+		Degraded:     true,
 		PowerCapable: true, PowerEnabled: true, CapApplied: true,
 		PowerLimitW: 123, DefaultPowerLimitW: 145, MinPowerLimitW: 100, MaxPowerLimitW: 145, EcoWatts: 123,
 		GPU: daemon.GPUStatus{Name: "RTX", TempC: 60, PowerUsageW: 110, UsedVRAMMiB: 800, TotalVRAMMiB: 8151,
@@ -579,6 +580,9 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 	}
 	if got.FoldingSeconds != 5025 || len(got.ProjectsContributed) != 2 || got.ProjectsContributed[1] != 16969 {
 		t.Fatalf("aporte = %d s, %v", got.FoldingSeconds, got.ProjectsContributed)
+	}
+	if !got.StartupHold {
+		t.Fatal("startup_hold no llegó al cliente")
 	}
 	if got.Mode != ModePausedManual || got.ManualOverride != OverridePause {
 		t.Fatalf("constantes desalineadas: %q / %q", got.Mode, got.ManualOverride)

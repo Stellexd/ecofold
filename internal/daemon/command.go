@@ -87,7 +87,10 @@ type Status struct {
 	// PausedByUs reports that the current FAH pause is the daemon's, so the
 	// daemon resumes it; false while folding and for a pause the user made.
 	PausedByUs bool `json:"paused_by_us"`
-	Degraded   bool `json:"degraded"`
+	// StartupHold reports that PausedByUs is a pause inherited from a
+	// previous run that the startup hold still keeps (StartupHoldTicks).
+	StartupHold bool `json:"startup_hold"`
+	Degraded    bool `json:"degraded"`
 
 	// PowerCapable is false when the device has no power limit control;
 	// PowerEnabled is false when the daemon is not applying it (not capable,
@@ -205,6 +208,7 @@ func (d *Daemon) publish() Status {
 		Mode:                d.mode,
 		ManualOverride:      d.manual,
 		PausedByUs:          d.pausedByUs,
+		StartupHold:         d.resumeHold > 0 && d.pausedByUs,
 		Degraded:            d.degraded,
 		PowerCapable:        d.powerCapable,
 		PowerEnabled:        d.powerEnabled,

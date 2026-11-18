@@ -187,3 +187,30 @@ func TestFoldingIsAccounted(t *testing.T) {
 		t.Fatalf("el snapshot comparte memoria con el daemon: %v", got)
 	}
 }
+
+// TestStatusReportsTheStartupHold: a pause inherited through the marker is
+// published as held until the hold ends; a fresh start never is.
+func TestStatusReportsTheStartupHold(t *testing.T) {
+	h := newHarness(t, true)
+	if err := (marker{dir: h.dir}).set(); err != nil {
+		t.Fatalf("marker.set: %v", err)
+	}
+	h.start(t)
+	hold := DefaultConfig().StartupHoldTicks
+
+	h.ticks(hold-1, snapIdle)
+	if st := h.d.publish(); !st.StartupHold || !st.PausedByUs || st.Mode != ModeFolding {
+		t.Fatalf("durante la espera: hold=%v ours=%v mode=%s", st.StartupHold, st.PausedByUs, st.Mode)
+	}
+	h.ticks(1, snapIdle)
+	if st := h.d.publish(); st.StartupHold {
+		t.Fatal("la espera terminó y el status la sigue anunciando")
+	}
+
+	fresh := newHarness(t, true)
+	fresh.start(t)
+	fresh.ticks(1, snapIdle)
+	if fresh.d.publish().StartupHold {
+		t.Fatal("arranque sin marcador con startup_hold")
+	}
+}
