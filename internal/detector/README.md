@@ -100,13 +100,14 @@ is returned.
 
 `DarwinCollector` reads `notifyutil -g com.apple.system.thermalpressurelevel`
 on every `Collect` (no root, no cgo, 1 s timeout, 4 KiB output cap) into
-`SystemSnapshot.ThermalLevel`: 0 nominal, 1 moderate, 2 heavy ("serious" in
-`ProcessInfo`), 3 trapping and 4 sleeping ("critical"). A level of
-`ThermalPressureSerious` (2) or more returns `StatePausedThermal` on the first
-tick, without `SustainedTicksRequired`. The pause is latched for
-`CooldownTicksRequired` consecutive ticks below 2, so a Mac that cools a few
-degrees does not resume and heat up again; a new serious tick restarts the
-count.
+`SystemSnapshot.ThermalLevel`: 0 nominal, 1 moderate ("fair" in
+`ProcessInfo`), 2 heavy ("serious"), 3 trapping and 4 sleeping ("critical").
+A level at or above `ThermalPauseLevel(MacProfile)` returns
+`StatePausedThermal` on the first tick, without `SustainedTicksRequired`: 1 on
+a fanless Mac, `ThermalPressureSerious` (2) on every other profile and on
+Linux. The pause is latched for `CooldownTicksRequired` consecutive ticks
+below that level, so a Mac that cools a few degrees does not resume and heat
+up again; a new tick at the level restarts the count.
 
 A current game load keeps reporting `StatePausedLoad`. Otherwise the thermal
 reason is reported before the battery one, also while the load latch is
@@ -117,7 +118,49 @@ calls (30 s), then 0 (unknown) is reported. Linux always reports 0.
 
 This is a backstop for sustained heat only. On the M4 Air the level stayed at
 0 with the CPU at 106 °C under FAH load
-(`docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`).
+(`docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`). The protection against that
+spike is the CPU thread budget below.
+
+### Hardware profile and FAH CPU budget (macOS)
+
+`DarwinCollector` reads the model and core counts once with
+`/usr/sbin/sysctl -n hw.model hw.physicalcpu hw.perflevel0.physicalcpu
+hw.perflevel1.physicalcpu` (`FetchHardwareInfoContext`: no root, no cgo, 1 s
+timeout, 4 KiB cap; tried on up to 3 `Collect` calls). `hw.perflevel0` is the
+performance cluster and `hw.perflevel1` the efficiency cluster; on an Intel Mac
+both are missing, sysctl exits 1 after printing the first two values, and the
+split stays 0. A failed read never fails `Collect`: the model is unknown and
+the core count is `runtime.NumCPU()`.
+
+`ClassifyMacProfile(model, HasBattery)` sets `SystemSnapshot.MacProfile`:
+
+| Profile | Rule | Examples |
+| --- | --- | --- |
+| `fanless` | `MacBookAir*` or `Mac14,2`, `Mac14,15`, `Mac15,12`, `Mac15,13`, `Mac16,12`, `Mac16,13`; also any laptop not known to be a MacBook Pro (conservative) | MacBook Air M1-M4 |
+| `active_laptop` | battery and `MacBookPro*` or a known M2-M4 MacBook Pro `Mac*` id | MacBook Pro |
+| `desktop` | no battery (and not a known Air) | Mac mini, Mac Studio, iMac, Mac Pro |
+
+`RecommendedCPUs(profile, hw, OnAC, ThermalLevel)` sets
+`SystemSnapshot.RecommendedCPUs`, the CPU threads Folding@home may use. It is
+at least 1 and never more than the physical cores; the thermal pause itself is
+the evaluator's.
+
+| Profile | AC | Battery | Level 1 | Pauses at |
+| --- | --- | --- | --- | --- |
+| `fanless` | 1 | 1 | 1 | 1 |
+| `active_laptop` | max(2, min(E-cores, physical/2)) | max(1, min(2, E-cores/2)) | 1 | 2 |
+| `desktop` | max(2, physical-2) | — | max(2, physical/2) | 2 |
+
+Examples: MacBook Air M4 (`Mac16,12`, 4P+6E) 1 thread; MacBook Pro M4
+(`Mac16,1`, 4P+6E) 5 on AC and 2 on battery; MacBook Pro M4 Pro (`Mac16,8`,
+10P+4E) 4 on AC; Mac Studio M2 Max (`Mac14,13`, 8P+4E) 10.
+
+The fanless budget is measured: on the M4 Air FAH with `cpus` 1 held the CPU
+at or below 70 °C, `cpus` 2 reached 90 °C in ~35 s and `cpus` 4 106 °C in
+5-10 s. The MacBook Pro and desktop budgets are not measured yet.
+
+Linux leaves both fields empty (`""`, 0): FAH folds on the GPU there and the
+daemon never changes its `cpus`.
 
 ### Compute contention (Linux)
 

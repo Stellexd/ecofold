@@ -15,7 +15,7 @@ The collector uses macOS system utilities and the Python 3 standard library; it 
 - The profile reads `hw.model` and `machdep.cpu.brand_string` with `sysctl`; it obtains the macOS version through Python's `platform.mac_ver()`.
 - The collector does not call `nvidia-smi` or `powermetrics`, and does not invoke `sudo`.
 
-The Go daemon's `DarwinCollector` reads the same `ioreg` classes, plus the thermal pressure level (see "Thermal guard").
+The Go daemon's `DarwinCollector` reads the same `ioreg` classes, plus the thermal pressure level (see "Thermal guard") and, once, the model and core counts through `/usr/sbin/sysctl -n hw.model hw.physicalcpu hw.perflevel0.physicalcpu hw.perflevel1.physicalcpu` (see "Hardware profile and FAH CPU threads").
 
 ## Thermal guard
 
@@ -23,19 +23,67 @@ On a fanless MacBook Air M4, running the Folding@home client took the CPU to 105
 
 macOS publishes its thermal pressure on the notify(3) key `com.apple.system.thermalpressurelevel`, readable without root through `/usr/bin/notifyutil -g com.apple.system.thermalpressurelevel` (output: `com.apple.system.thermalpressurelevel 0`). `DarwinCollector` reads it on every tick, with a 1 s timeout and a 4 KiB output cap, into `SystemSnapshot.ThermalLevel`.
 
-| Level | `OSThermalPressureLevel` | `ProcessInfo.ThermalState` | EcoFold |
-|---|---|---|---|
-| 0 | nominal | nominal | folds |
-| 1 | moderate | fair | folds |
-| 2 | heavy | serious | pauses (`paused_thermal`) |
-| 3 | trapping | critical | pauses |
-| 4 | sleeping | critical | pauses |
+| Level | `OSThermalPressureLevel` | `ProcessInfo.ThermalState` | Fanless Mac | Other Macs |
+|---|---|---|---|---|
+| 0 | nominal | nominal | folds (1 thread) | folds |
+| 1 | moderate | fair | pauses (`paused_thermal`) | folds with fewer threads |
+| 2 | heavy | serious | pauses | pauses (`paused_thermal`) |
+| 3 | trapping | critical | pauses | pauses |
+| 4 | sleeping | critical | pauses | pauses |
 
-A level of 2 or more pauses folding on that tick. The pause lasts until the level has stayed below 2 for the load cooldown (60 ticks, two minutes), so the Mac is not heated again as soon as it drops a few degrees. A failed read does not fail the tick: the last level is kept for 15 ticks (30 s), then 0 (unknown) is assumed. `force_resume` answers `thermal_pressure` while the pause lasts.
+A level at the profile's pause level (1 on a fanless Mac, 2 otherwise) pauses folding on that tick. The pause lasts until the level has stayed below it for the load cooldown (60 ticks, two minutes), so the Mac is not heated again as soon as it drops a few degrees. A failed read does not fail the tick: the last level is kept for 15 ticks (30 s), then 0 (unknown) is assumed. `force_resume` answers `thermal_pressure` while the pause lasts.
 
 The level is the system's own judgement and has no temperatures behind it that EcoFold can read.
 
-**Measured limitation (2026-11-18):** on the MacBook Air M4, the FAH CPU core (`FahCore_a9`, 4 threads, ~400 % CPU) took the CPU to 105–106 °C within 5–10 s, and the level stayed at `0` (`com.apple.system.thermalstatus` also `0`, `pmset -g therm` recorded no warning). The pressure level follows the system's sustained thermal state, not a die spike, so this guard cannot keep the CPU below 100 °C. It is a backstop only. See `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
+**Measured limitation (2026-11-18):** on the MacBook Air M4, the FAH CPU core (`FahCore_a9`, 4 threads, ~400 % CPU) took the CPU to 105–106 °C within 5–10 s, and the level stayed at `0` (`com.apple.system.thermalstatus` also `0`, `pmset -g therm` recorded no warning). The pressure level follows the system's sustained thermal state, not a die spike, so this guard cannot keep the CPU below 100 °C. It is a backstop only; the CPU thread budget below attacks the heat source. See `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
+
+## Hardware profile and FAH CPU threads
+
+FAH folds on the CPU on Apple Silicon, and its thread count is what heats the chip. `DarwinCollector` reads `hw.model` and the core counts once (1 s timeout, 4 KiB cap, up to 3 tries; a failure never fails a tick) and classifies the Mac:
+
+| Profile | Macs | FAH threads on AC | On battery | At pressure level 1 | Pauses at |
+|---|---|---|---|---|---|
+| `fanless` | MacBook Air (`MacBookAir*`, `Mac14,2`, `Mac14,15`, `Mac15,12`, `Mac15,13`, `Mac16,12`, `Mac16,13`) and any laptop that is not a known MacBook Pro | 1 | 1 | — | 1 |
+| `active_laptop` | MacBook Pro (`MacBookPro*`, known M2–M4 `Mac*` ids) | max(2, min(E-cores, physical/2)) | max(1, min(2, E-cores/2)) | 1 | 2 |
+| `desktop` | no battery: Mac mini, Mac Studio, iMac, Mac Pro | max(2, physical − 2) | — | max(2, physical/2) | 2 |
+
+Measured on the MacBook Air M4 (`Mac16,12`, 4 P-cores + 6 E-cores, fanless) with FAH 8.5.6 and `FahCore_a9`:
+
+| FAH `cpus` | CPU temperature |
+|---|---|
+| 1 | ≤ 70 °C, stable |
+| 2 | 90 °C in ~35 s |
+| 4 | 106 °C in 5–10 s |
+
+The MacBook Pro and desktop budgets follow the same reasoning (leave the performance cores to the user) but are not measured yet.
+
+The daemon writes the budget to FAH's v8 `cpus` option, the same setting as the Web Control's CPU slider, and treats it like the GPU power limit:
+
+- It reads and keeps the user's value before the first change.
+- It applies the budget before every resume (also `force_resume`) and on every folding tick, so a switch to battery or a rise to pressure level 1 reaches a running FAH. A value changed in FAH's own UI while EcoFold runs is put back after the next status refresh (10 s).
+- If the budget cannot be applied, the daemon does not resume its own pause.
+- On exit (`SIGINT`/`SIGTERM`) it restores the user's value within 2 s. FAH keeps folding with that value: on a fanless Mac the log warns, and `ecofold-daemon -pause-fah` pauses FAH.
+
+Wire format, verified against `fah-client` 8.5.6: `cpus` is read from `groups[""].config.cpus` (top-level `config.cpus` on clients without groups) and set with `{"cmd":"config","time":…,"config":{"groups":{"":{"cpus":N},"<other group>":{}}}}`. FAH merges each group's dict into that group and **deletes every named group missing from `groups`**, so every group of the current snapshot is listed. FAH also drops a command of the same kind whose `time` is not a later second than the previous one; the client moves such a time to the next second. Only the default group is limited: threads assigned to other resource groups are not counted.
+
+Known limits:
+
+- The user's original value lives in memory. If the daemon is killed (`SIGKILL`, crash), FAH keeps the budget and the next start records the budget as the user's value.
+- Whether a running work unit picks up a new `cpus` value without a restart was not measured; the daemon applies the budget before resuming, so a work unit it resumes starts with it.
+
+## Emergency stop
+
+`fah-client` is a system service and keeps folding without EcoFold. To pause it without the daemon or the Web Control:
+
+```sh
+ecofold-daemon -pause-fah
+```
+
+It connects to `ws://127.0.0.1:7396/api/websocket`, pauses every resource group, waits up to 3 s for FAH to confirm and exits (0 on success). It opens no socket and never touches NVML, so it works while a daemon runs; a running daemon sees the pause as the user's and does not resume it.
+
+## Single daemon instance
+
+A daemon whose socket is already served by another daemon (`ipc.ErrAlreadyRunning`) exits with code 1 before its control loop starts. On 2026-11-18 a second daemon kept running without IPC, read the first one's manual-pause marker as an inherited automatic pause and resumed FAH. The marker now also records whether the pause was manual, so a restarted daemon keeps a manual pause until `force_resume`.
 
 ## Collector and SQLite database
 
@@ -168,7 +216,8 @@ In that charging snapshot, `net_battery_flow_mw` was `+23,537 mW`, wall input wa
 | `IOClass` | `IOAccelerator` | GPU node class; `AGXAcceleratorG16G` on measured M4. |
 | `PerformanceStatistics.* Utilization %` | `IOAccelerator` → `PerformanceStatistics` | Device, renderer, and tiler utilization percentages. |
 | `In use system memory` | `IOAccelerator` → `PerformanceStatistics` | GPU in-use system memory in bytes; collector stores MiB. |
-| `com.apple.system.thermalpressurelevel` | `notifyutil -g` | Thermal pressure 0–4; 2 or more pauses folding. |
+| `com.apple.system.thermalpressurelevel` | `notifyutil -g` | Thermal pressure 0–4; 1 or more pauses a fanless Mac, 2 or more any other. |
+| `hw.model`, `hw.physicalcpu`, `hw.perflevel0/1.physicalcpu` | `sysctl -n` | Hardware profile and FAH CPU thread budget. |
 | `Alloc system memory` | `IOAccelerator` → `PerformanceStatistics` | GPU-allocated system memory in bytes; exposed by IOKit but not stored by the collector. |
 
 ## Repeat the measurements

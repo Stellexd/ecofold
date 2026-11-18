@@ -6,15 +6,17 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-18 (M3 GUI on `feat/m3-gui`).
+Last updated: 2026-11-18 (thermal incident fixes on `feat/m3-gui`).
 
 ## Next session
 
-0. **macOS thermal incident (2026-11-18), blocks the GUI release on macOS.**
-   The M4 Air reached 106 °C while folding and EcoFold did not stop it. See
-   `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md` and the boxes under section 3
-   and "Open risks". Until it is fixed, do not leave FAH folding on the M4
-   unattended.
+0. **macOS thermal incident (2026-11-18): fixed in code, not yet seen live
+   under load.** Single instance, `-pause-fah`, the manual-pause marker, the
+   pause enforcement (INC-3) and the FAH CPU thread budget are implemented and
+   tested with fakes; `SetCPUs` was checked against the real `fah-client`
+   8.5.6 with FAH paused. Next: run the daemon on the M4 Air with FAH folding
+   and watch the temperature with the budget of 1 thread (boxes under
+   section 3). Until then, do not leave FAH folding on the M4 unattended.
 1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
    while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
    with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
@@ -112,9 +114,9 @@ always stop folding.
 - [ ] Start the unit without the `ecofold` group (`groupdel ecofold`): it must
   still start, log `socket group not found` and leave the socket `0600`. Only
   a unit test covers this today.
-- [ ] IPC changes are not persisted: `set_eco_watts`, `set_pause_processes`
-  and the manual pause are lost when the daemon restarts (the flags apply
-  again). Decide where a config file lives and who may write it before the
+- [ ] IPC changes are not persisted: `set_eco_watts` and
+  `set_pause_processes` are lost when the daemon restarts (the flags apply
+  again); the manual pause is kept through the marker since 2026-11-18. Decide where a config file lives and who may write it before the
   GUI ships settings.
 - [x] The `fah` block of the status was what the daemon saw the last time it
   paused or resumed. The loop now reads the FAH status on its first tick and
@@ -210,15 +212,32 @@ always stop folding.
   `paused_thermal` (`b476b77`). Live on the M4 Air the level stayed at 0
   while the CPU was at 106 °C, so the guard never fired. See
   `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
-  - [ ] Limit FAH's CPU threads on macOS through the v8 `cpus` option
-    (record and restore the user's value), with values measured on the M4.
+  - [x] Limit FAH's CPU threads on macOS through the v8 `cpus` option
+    (record and restore the user's value), with values measured on the M4:
+    1 thread kept it at ≤ 70 °C, 2 reached 90 °C in ~35 s, 4 reached 106 °C
+    in 5–10 s. Profiles `fanless` / `active_laptop` / `desktop` from
+    `hw.model` (`internal/detector/darwin_profile.go`); budget applied before
+    every resume and restored on exit (`docs/MACOS_TELEMETRY.md`).
+  - [ ] Run the daemon on the M4 Air with FAH folding and confirm it sets
+    `cpus` 1 and the CPU stays at or below 70 °C; restart the daemon and
+    check the user's value comes back.
+  - [ ] Measure the MacBook Pro and desktop budgets (Mac Studio M1 Max is
+    available) under FAH load.
+  - [ ] Persist the user's original `cpus` so a killed daemon does not record
+    the budget as the user's value on the next start.
+  - [x] Pause a fanless Mac at pressure level 1; level 2 stays the rule for
+    the other profiles.
   - [ ] Trace the pressure level under sustained FAH load to see if and when
-    it reaches 1 or 2; decide on a rule for level 1 held for minutes.
-  - [ ] Document an emergency stop that works without the daemon.
-- [ ] **Single daemon instance** (incident 2026-11-18). A second daemon whose
-  socket is taken (`ipc.ErrAlreadyRunning`) keeps running without IPC,
-  shares the pause marker and drives FAH against the first one. Make
-  `ErrAlreadyRunning` fatal at startup.
+    it reaches 1 or 2.
+  - [x] Document an emergency stop that works without the daemon:
+    `ecofold-daemon -pause-fah` (`docs/MACOS_TELEMETRY.md`).
+- [x] **Single daemon instance** (incident 2026-11-18). A second daemon whose
+  socket is taken (`ipc.ErrAlreadyRunning`) now exits with code 1 before its
+  loop starts, without touching the GPU, FAH or the marker. Other socket
+  errors still leave the daemon running without IPC.
+- [x] **Manual pause survives a restart** (incident 2026-11-18, 3.5). The
+  marker holds `auto` or `manual`; a manual pause restarts in
+  `paused_manual` and is never resumed by the startup hold.
 - [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
   with an XDG autostart entry / a LaunchAgent), and an application icon and
   bundle for macOS.
@@ -263,11 +282,12 @@ always stop folding.
 - [ ] **L2-1** (accepted, see `CHAOS_REPORT_LAYER2.md`): a user process can
   pose as `reaper SteamLaunch`; it only holds a pause its own load caused.
 
-- [ ] **INC-3 The daemon does not enforce its own pause** (incident
-  2026-11-18). A daemon in `paused_manual` with `paused_by_us: true` read FAH
-  as folding and did nothing; the status kept saying it was paused.
-  `Daemon.apply` acts only on transitions. Fix without breaking CH-10: a
-  resume the user makes in FAH stays the user's.
+- [x] **INC-3 The daemon does not enforce its own pause** (incident
+  2026-11-18). The FAH refresh (every 10 s) now pauses FAH again on the same
+  tick during `paused_load`, `paused_battery` and `paused_thermal`. During
+  `paused_manual`, or any other mode, a resume made outside EcoFold is the
+  user's (CH-10): the override, `paused_by_us` and the marker are cleared and
+  the status reports what FAH does.
 
 ## After v0.1.0
 
