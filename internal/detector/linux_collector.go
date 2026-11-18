@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -207,34 +206,15 @@ func (c *LinuxCollector) userPauseMatches(ctx context.Context) []string {
 		if ctx.Err() != nil || len(found) >= maxPauseMatches {
 			break
 		}
-		name := ""
-		if comm, err := c.read(procCommPath(pid)); err == nil {
-			name = strings.TrimSpace(string(comm))
-		}
-		if !matchPattern(c.pause, name) {
-			argv := c.argv(pid)
-			if len(argv) == 0 {
-				continue
-			}
-			name = anyBase(argv[0])
-			if !matchPattern(c.pause, name) {
-				continue
-			}
-		}
-		if matchPattern(foldingProcesses, name) {
+		if comm, err := c.read(procCommPath(pid)); err == nil &&
+			addPauseMatch(found, c.pause, strings.TrimSpace(string(comm))) {
 			continue
 		}
-		found[strings.ToLower(name)] = true
+		if argv := c.argv(pid); len(argv) > 0 {
+			addPauseMatch(found, c.pause, anyBase(argv[0]))
+		}
 	}
-	if len(found) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(found))
-	for name := range found {
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out
+	return sortedMatches(found)
 }
 
 // listProcPIDs returns the numeric entries of /proc.

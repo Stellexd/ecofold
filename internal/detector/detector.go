@@ -261,8 +261,21 @@ type SystemSnapshot struct {
 	// these sessions is held until the session ends.
 	LiveGameSessions []string
 
+	// GPUApps is each app's GPU time since the previous tick, from the
+	// AppUsage of IOAccelerator's user clients (macOS only), busiest first.
+	// It is nil on Linux, on the first tick and when this macOS does not
+	// publish AppUsage.
+	//
+	// The evaluator does not read it. It is not stored in GPUProcesses on
+	// purpose: a non-nil GPUProcesses makes the evaluator ignore the global
+	// GPUDeviceUtilPct and GPUInUseMemMiB, so on macOS an empty first tick
+	// or a game whose work is drawn by an ignored process would read as "no
+	// load", and the memory rule could never fire (no per-app memory). It is
+	// logged with -debug until thresholds are calibrated against it.
+	GPUApps []GPUAppUsage
+
 	// UserPauseMatches lists the running processes that match the user's
-	// pause list (Linux only). While it is not empty, every tick counts as
+	// pause list (Linux and macOS). While it is not empty, every tick counts as
 	// load regardless of GPU use: the user asked for no folding while those
 	// apps run.
 	UserPauseMatches []string
@@ -288,6 +301,15 @@ type SystemSnapshot struct {
 	// 0 means "do not touch FAH's cpus": always on Linux, where FAH folds on
 	// the GPU.
 	RecommendedCPUs int
+}
+
+// GPUAppUsage is one app's share of the GPU between two ticks (macOS).
+type GPUAppUsage struct {
+	PID  uint32
+	Name string
+	// GPUTimePct is the GPU time of the app's command queues since the
+	// previous tick, in percent of the elapsed time, clamped to 0-100.
+	GPUTimePct int
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
