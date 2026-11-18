@@ -2,6 +2,7 @@ package fah
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -11,11 +12,15 @@ type MockController struct {
 	mu      sync.RWMutex
 	status  Status
 	project int // project restored by Resume
+	cpus    int // reported as Status.CPUs; 0 until SetCPUs
 	err     error
 	closed  bool
 }
 
-var _ Controller = (*MockController)(nil)
+var (
+	_ Controller = (*MockController)(nil)
+	_ CPULimiter = (*MockController)(nil)
+)
 
 // NewMockController returns a mock that starts folding project.
 func NewMockController(project int) *MockController {
@@ -70,7 +75,24 @@ func (m *MockController) GetStatus(ctx context.Context) (Status, error) {
 	if err := m.check(ctx); err != nil {
 		return Status{State: StateUnknown}, err
 	}
-	return m.status, nil
+	st := m.status
+	st.CPUs = m.cpus
+	return st, nil
+}
+
+// SetCPUs records cpus as the reported CPU thread count.
+func (m *MockController) SetCPUs(ctx context.Context, cpus int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if err := m.check(ctx); err != nil {
+		return err
+	}
+	if cpus < 1 || cpus > MaxCPUs {
+		return fmt.Errorf("fah: cpus %d outside 1-%d", cpus, MaxCPUs)
+	}
+	m.cpus = cpus
+	return nil
 }
 
 // Close makes every later call return ErrClosed. It is idempotent.

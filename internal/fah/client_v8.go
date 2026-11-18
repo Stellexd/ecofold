@@ -94,9 +94,15 @@ type ClientV8 struct {
 	mu     sync.Mutex
 	closed bool
 	conns  map[net.Conn]struct{}
+	// lastChange is the time sent with the last command of each kind
+	// ("state", "config"); see changeTime.
+	lastChange map[string]time.Time
 }
 
-var _ Controller = (*ClientV8)(nil)
+var (
+	_ Controller = (*ClientV8)(nil)
+	_ CPULimiter = (*ClientV8)(nil)
+)
 
 // NewClientV8 returns a client for endpoint, or DefaultEndpoint when endpoint
 // is empty. Only ws:// URLs whose host is exactly 127.0.0.1, ::1 or localhost
@@ -227,16 +233,16 @@ type stateCommand struct {
 }
 
 func (c *ClientV8) sendState(ctx context.Context, state string) error {
+	ctx, cancel := c.withDefaultTimeout(ctx)
+	defer cancel()
 	cmd, err := json.Marshal(stateCommand{
 		Cmd:   "state",
 		State: state,
-		Time:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
+		Time:  formatChangeTime(c.changeTime("state")),
 	})
 	if err != nil {
 		return fmt.Errorf("fah: encode command: %w", err)
 	}
-	ctx, cancel := c.withDefaultTimeout(ctx)
-	defer cancel()
 
 	err = c.do(ctx, state, func(ws *wsConn) error {
 		// Read the snapshot first: it proves the peer is a FAH client before
@@ -250,20 +256,106 @@ func (c *ClientV8) sendState(ctx context.Context, state string) error {
 	if err != nil {
 		return err
 	}
-	return c.confirmPaused(ctx, state, state == "pause")
+	want := state == "pause"
+	return c.confirm(ctx, state, func(st Status) bool { return st.Paused == want })
 }
 
-// confirmPaused polls the state until Paused equals want or ctx expires. A
+// SetCPUs sets the "cpus" option of the default resource group and returns
+// nil only after a fresh snapshot reports it.
+//
+// FAH v8.3+ takes {"cmd":"config","config":{"groups":{...}}} and merges each
+// group's dict into that group's config, but deletes every named group
+// missing from "groups". The command therefore lists every group from the
+// snapshot read on the same connection, with an empty dict (no change)
+// except for the default group "". Clients without groups get the legacy
+// top-level {"config":{"cpus":N}}.
+func (c *ClientV8) SetCPUs(ctx context.Context, cpus int) error {
+	if cpus < 1 || cpus > MaxCPUs {
+		return fmt.Errorf("fah: cpus %d outside 1-%d", cpus, MaxCPUs)
+	}
+	ctx, cancel := c.withDefaultTimeout(ctx)
+	defer cancel()
+	now := c.changeTime("config")
+
+	err := c.do(ctx, "config", func(ws *wsConn) error {
+		_, groups, err := ws.readSnapshot()
+		if err != nil {
+			return err
+		}
+		cmd, err := cpusCommand(groups, cpus, now)
+		if err != nil {
+			return err
+		}
+		return ws.writeFrame(opText, cmd)
+	})
+	if err != nil {
+		return err
+	}
+	return c.confirm(ctx, "config", func(st Status) bool { return st.CPUs == cpus })
+}
+
+// cpusCommand builds the config command for SetCPUs. groups are the resource
+// groups of the snapshot, nil for a client without groups.
+func cpusCommand(groups []string, cpus int, now time.Time) ([]byte, error) {
+	config := map[string]any{"cpus": cpus}
+	if groups != nil {
+		all := make(map[string]map[string]any, len(groups)+1)
+		for _, g := range groups {
+			all[g] = map[string]any{}
+		}
+		all[""] = map[string]any{"cpus": cpus}
+		config = map[string]any{"groups": all}
+	}
+	cmd, err := json.Marshal(map[string]any{
+		"cmd":    "config",
+		"time":   formatChangeTime(now),
+		"config": config,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fah: encode command: %w", err)
+	}
+	return cmd, nil
+}
+
+// changeTime returns the time to send with a cmd command. FAH keeps the time
+// of the last accepted command of each kind with one-second resolution and
+// silently drops a command whose time is not later (App::validateChange), so
+// a second command within the same second as the previous one would be lost.
+// When the previous command of this client is that recent, the time is moved
+// to the next second instead; FAH accepts times up to 65 minutes ahead
+// (maxChangeSkew), and the daemon sends one command at a time, so this stays
+// about a second ahead at most. Commands from other clients (the Web Control)
+// cannot be seen; one of ours dropped for that reason fails its
+// confirmation and the caller retries.
+func (c *ClientV8) changeTime(cmd string) time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lastChange == nil {
+		c.lastChange = make(map[string]time.Time)
+	}
+	t := time.Now()
+	if next := c.lastChange[cmd].Truncate(time.Second).Add(time.Second); t.Before(next) {
+		t = next
+	}
+	c.lastChange[cmd] = t
+	return t
+}
+
+func formatChangeTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000Z07:00")
+}
+
+// confirm polls the state until done reports true or ctx expires. A
 // successful write only means the bytes reached the local socket buffer; if
 // FAH died or dropped the connection, the command was lost, and the daemon
-// must not believe folding is paused when it is not.
-func (c *ClientV8) confirmPaused(ctx context.Context, op string, want bool) error {
+// must not believe folding is paused (or limited) when it is not.
+func (c *ClientV8) confirm(ctx context.Context, op string, done func(Status) bool) error {
 	var last Status
 	var lastErr error
 	wait := confirmInterval
 	for {
 		last, lastErr = c.GetStatus(ctx)
-		if lastErr == nil && last.Paused == want {
+		if lastErr == nil && done(last) {
 			return nil
 		}
 		if errors.Is(lastErr, ErrClosed) {
@@ -593,18 +685,25 @@ func (w *wsConn) writeFrame(op byte, payload []byte) error {
 // readStatus reads messages until the state snapshot, which FAH v8 sends
 // first, and parses it.
 func (w *wsConn) readStatus() (Status, error) {
+	st, _, err := w.readSnapshot()
+	return st, err
+}
+
+// readSnapshot is readStatus that also returns the snapshot's resource group
+// names (nil when it has none).
+func (w *wsConn) readSnapshot() (Status, []string, error) {
 	for range maxSkippedMessages + 1 {
 		msg, err := w.readMessage()
 		if err != nil {
-			return Status{State: StateUnknown}, err
+			return Status{State: StateUnknown}, nil, err
 		}
-		st, err := parseFAHMessage(msg)
+		st, groups, err := parseFAHSnapshot(msg)
 		if errors.Is(err, errNotSnapshot) {
 			continue
 		}
-		return st, err
+		return st, groups, err
 	}
-	return Status{State: StateUnknown}, errors.New("no state snapshot received")
+	return Status{State: StateUnknown}, nil, errors.New("no state snapshot received")
 }
 
 // closeGracefully sends a close frame and briefly drains until the server's
@@ -639,6 +738,18 @@ type fahSnapshot struct {
 
 type fahConfig struct {
 	Paused bool `json:"paused"`
+	// CPUs is decoded by hand (cpus): a value of an unexpected type must not
+	// fail the snapshot and block a pause.
+	CPUs json.RawMessage `json:"cpus"`
+}
+
+// cpus returns the config's "cpus" as an int in 1..MaxCPUs, or 0.
+func (c fahConfig) cpus() int {
+	n, err := strconv.Atoi(string(c.CPUs))
+	if err != nil || n < 1 || n > MaxCPUs {
+		return 0
+	}
+	return n
 }
 
 type fahGroup struct {
@@ -668,18 +779,37 @@ func (u fahUnit) projectID() int {
 // initial state snapshot (a JSON object) carries the full state; incremental
 // updates (JSON arrays) and other values return errNotSnapshot.
 func parseFAHMessage(raw []byte) (Status, error) {
+	st, _, err := parseFAHSnapshot(raw)
+	return st, err
+}
+
+// parseFAHSnapshot is parseFAHMessage that also returns the resource group
+// names, nil when the snapshot has no groups.
+func parseFAHSnapshot(raw []byte) (Status, []string, error) {
 	unknown := Status{State: StateUnknown}
 
 	trimmed := strings.TrimSpace(string(raw))
 	if trimmed == "" || trimmed[0] != '{' {
-		return unknown, errNotSnapshot
+		return unknown, nil, errNotSnapshot
 	}
 	var snap fahSnapshot
 	if err := json.Unmarshal([]byte(trimmed), &snap); err != nil {
-		return unknown, fmt.Errorf("invalid state snapshot: %w", err)
+		return unknown, nil, fmt.Errorf("invalid state snapshot: %w", err)
 	}
 	if snap.Config == nil && len(snap.Groups) == 0 {
-		return unknown, errors.New("state snapshot has no config or groups")
+		return unknown, nil, errors.New("state snapshot has no config or groups")
+	}
+
+	var groups []string
+	cpus := 0
+	if len(snap.Groups) > 0 {
+		groups = make([]string, 0, len(snap.Groups))
+		for name := range snap.Groups {
+			groups = append(groups, name)
+		}
+		cpus = snap.Groups[""].Config.cpus()
+	} else {
+		cpus = snap.Config.cpus()
 	}
 
 	// Paused means paused everywhere, matching the Web Control's is_paused().
@@ -706,10 +836,10 @@ func parseFAHMessage(raw []byte) (Status, error) {
 
 	switch {
 	case paused:
-		return Status{Paused: true, State: StatePaused}, nil
+		return Status{Paused: true, State: StatePaused, CPUs: cpus}, groups, nil
 	case project != 0:
-		return Status{ActiveProjectID: project, State: StateFolding}, nil
+		return Status{ActiveProjectID: project, State: StateFolding, CPUs: cpus}, groups, nil
 	default:
-		return Status{State: StateIdle}, nil
+		return Status{State: StateIdle, CPUs: cpus}, groups, nil
 	}
 }
