@@ -188,17 +188,64 @@ own SM, which drops under real contention (from ~95 % to 49-80 % during the
 OptiX render) and stays put under a CPU render; it needs calibration because
 FahCore varies between about 75 and 98 % on its own.
 
-### User pause list (Linux)
+### User pause list (Linux and macOS)
 
-`LinuxCollector.SetPauseProcesses` takes patterns from `ParsePauseProcesses`
+`LinuxCollector.SetPauseProcesses` and `DarwinCollector.SetPauseProcesses` take patterns from `ParsePauseProcesses`
 (comma-separated, case-insensitive, trailing `*` for a prefix; at most 64
 patterns of 64 characters; `*` alone, paths and anything matching the FAH
 processes are rejected). Every tick it scans `/proc` once and reports matching
 processes, by `comm` or `basename(argv[0])`, in `UserPauseMatches`. While the
 list has a match, every tick counts as load regardless of GPU use: the pause
 starts after the usual sustain and folding resumes 2 minutes after the last
-match exits. The daemon exposes it as `-pause-processes "blender,obs"` until
-the M3 GUI and socket manage it. The macOS collector ignores it.
+match exits. The daemon takes it from `-pause-processes "blender,obs"` and
+from `set_pause_processes` on the socket.
+
+On macOS there is no `/proc`. `DarwinCollector` lists every process once per
+`Collect`, and only while the list is not empty, with `sysctl kern.proc.all`
+(`unix.SysctlKinfoProcSlice`, no cgo, no external command, no root) and
+matches `p_comm`. `p_comm` is cut to 16 bytes (`MAXCOMLEN`): when a 16-byte
+name is the start of a longer pattern, the executable's file name is read
+from `kern.procargs2` for that one process. That read fails for other users'
+processes and for a process that already exited; the process then keeps its
+`p_comm`. A listing error yields no matches and never fails `Collect`.
+
+Names seen on a MacBook Air M4 (macOS 27.2): Safari is `Safari`, Calculator is
+`Calculator`, and Notification Center's `p_comm` is `NotificationCent`, which
+`notificationcenter` matches through its executable name. Apps whose process
+is not the app's name (Electron apps, helpers such as `Discord Helper`) need
+their real process name or a prefix, for example `discord*`.
+
+### Per-app GPU time (macOS)
+
+`DarwinCollector` reads IOAccelerator with `ioreg -a -r -d 2 -l -c
+IOAccelerator`, which adds the accelerator's user clients to the node that
+`-d 1` returns (`-l` is needed: without it the archive omits the clients'
+properties). Each client has `IOUserClientCreator` (`pid 604, WindowServer`;
+the name is `p_comm`) and `AppUsage`, one entry per command queue with
+`accumulatedGPUTime` in nanoseconds. The collector keeps each client's last
+value by its registry ID, so a reused PID never inherits another process's
+time, and reports the busiest apps in `SystemSnapshot.GPUApps` as percent of
+the elapsed time (0-100). The first reading is a baseline and reports nil.
+
+The global metrics still come from the same node, so the reading costs one
+ioreg run per tick as before (about 160 KB instead of 140 KB on the M4). If
+the detailed reading fails or does not parse, the tick falls back to the
+plain `-d 1` reading; after 3 failures in a row the collector keeps to it. A
+reading without `AppUsage` (a macOS that does not publish it) reports nil
+and never fails the tick.
+
+WindowServer, WindowManager, Dock, ControlCenter, Notification Center,
+SystemUIServer, loginwindow, the FAH processes and EcoFold itself are left
+out (`darwinIgnoredGPUApps`), as is the daemon's own PID.
+
+`GPUApps` is not `GPUProcesses`, and the evaluator does not read it yet: a
+non-nil `GPUProcesses` makes the evaluator ignore `GPUDeviceUtilPct` and
+`GPUInUseMemMiB`. On macOS that would read the first tick, and any game whose
+drawing WindowServer does, as "no load", and the memory rule could never fire
+because there is no per-app memory. The daemon logs the figures with `-debug`
+(`msg="gpu apps"`, next to `device_util_pct`) until thresholds are calibrated
+against them. At rest on the M4 the device reported 4-16 % while the only
+non-system app was VSCodium Helper at 2 %; the rest was WindowServer.
 
 ### Game sessions (detection layer 2, Linux)
 
@@ -260,6 +307,7 @@ The caller must then keep its previous decision.
   "Compute contention").
 - Layer 2 does not restore game detection on drivers without per-process
   utilization (`M2-BLOCK`): sessions only hold a pause that layer 1 started.
+- `GPUApps` (macOS per-app GPU time) is only logged; no threshold uses it.
 - The battery-less desktop fixture is synthetic (there is no real Mac Studio dump).
 - On macOS, once a read has found a battery, a later empty `AppleSmartBattery`
   array is a transient ioreg glitch: `Collect` returns `ErrBatteryVanished`
@@ -270,5 +318,7 @@ The caller must then keep its previous decision.
 ## Fixture privacy
 
 Every serial (`AdapterDetails.SerialString`, `Serial`) is replaced with
-`REDACTED_SERIAL`. Verify with `plutil -lint internal/detector/testdata/*.plist`
+`REDACTED_SERIAL`. The `m4_air_gpu_clients_tick*.plist` readings keep only
+system processes and a few public apps among the user clients, with PIDs
+renumbered from 1000 and `fLastSubmissionPID` set to 0. Verify with `plutil -lint internal/detector/testdata/*.plist`
 and do not commit unsanitized dumps.

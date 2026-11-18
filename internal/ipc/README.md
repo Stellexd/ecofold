@@ -145,8 +145,8 @@ Notes:
   list come from the command-line flags again, and the manual pause is gone.
   FAH stays paused; if the daemon made the pause, the pause marker makes it
   resume after the startup hold.
-- On macOS `set_pause_processes` answers `unsupported`, like `set_eco_watts`:
-  the macOS collector cannot see processes, so a pause list would do nothing.
+- `set_pause_processes` works on Linux and macOS. On macOS the collector lists
+  processes with `sysctl kern.proc.all` (see `internal/detector/README.md`).
 
 ### Error codes
 
@@ -222,7 +222,8 @@ again.
   that the startup hold still keeps (one cooldown after the daemon starts).
   A client can say "starting" instead of "resuming".
 - `pause_list_supported`: false where `set_pause_processes` answers
-  `unsupported` (macOS), so a client can disable the control up front.
+  `unsupported` (a collector without a process view), so a client can disable
+  the control up front. It is true on Linux and macOS.
 - The status is a snapshot taken at `updated_at`, at the end of the last tick
   or command. Telemetry and game sessions are the last known values.
 - `fah` is what the daemon learned the last time it talked to FAH

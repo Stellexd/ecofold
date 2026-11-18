@@ -6,7 +6,7 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-18 (thermal incident fixes on `feat/m3-gui`).
+Last updated: 2026-11-18 (macOS pause list and per-app GPU time).
 
 ## Next session
 
@@ -24,9 +24,12 @@ Last updated: 2026-11-18 (thermal incident fixes on `feat/m3-gui`).
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. M3 is written: the IPC backend is verified on CachyOS and the GUI is
-   implemented (`feat/m3-gui`). Next: try the GUI on both desktops
-   (checklist in section 3), then the security review of the socket.
+3. M3 is written: the IPC backend is verified on CachyOS, the GUI is
+   implemented and the pause list works on macOS. Left on hardware to close
+   M3: the GUI on the CachyOS desktop (checklist in section 3), the M4 Air
+   folding with the CPU budget, the macOS pause list resuming after the
+   cooldown on AC, and the unit without the `ecofold` group; then the
+   security review of the socket.
 
 ## Road to v0.1.0
 
@@ -121,9 +124,21 @@ always stop folding.
 - [x] The `fah` block of the status was what the daemon saw the last time it
   paused or resumed. The loop now reads the FAH status on its first tick and
   every 5 ticks (10 s), so a pause made in FAH's own UI shows by itself.
-- [ ] Pause list on macOS: `set_pause_processes` and `-pause-processes` are
-  refused or ignored there (`unsupported`), because `DarwinCollector` reads
-  ioreg only. It needs a per-process source before it can be supported.
+- [x] Pause list on macOS (2026-11-18): `DarwinCollector` lists processes with
+  `sysctl kern.proc.all` (no root, no cgo) and resolves 16-byte `p_comm`
+  names through `kern.procargs2`. Checked on the M4 Air with a test daemon
+  and the mock FAH, on battery: `set_pause_processes` matched `safari`,
+  `calculator` and `notificationcenter` (from `NotificationCent`), the mode
+  went to `paused_load` 3 ticks later and back to `paused_battery` on the
+  first tick after Calculator quit.
+  - [ ] Not yet seen on AC: the resume of folding after the 2-minute cooldown
+    once the matching app quits. On battery the battery pause takes over, so
+    the cooldown never shows.
+- [ ] macOS per-app GPU time (`SystemSnapshot.GPUApps`, from `AppUsage` in
+  `ioreg -d 2 -l -c IOAccelerator`): implemented and logged with `-debug`
+  (`msg="gpu apps"`), not used by the evaluator. Calibrate it under a real
+  Metal game or render before any rule reads it; see
+  `internal/detector/README.md` for why it does not go into `GPUProcesses`.
 - [ ] Security review of the socket before merging (new attack surface). The
   daemon runs as root, so a socket bug is a root bug: socket `0660` with an
   `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts
