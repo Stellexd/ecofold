@@ -44,7 +44,10 @@ How the daemon opens the socket (`ipc.Listen`):
 
 If the socket cannot be opened at all, the daemon logs the error and runs
 without IPC. Capping and restoring the GPU power limit does not depend on the
-GUI's channel.
+GUI's channel. The exception is `ErrAlreadyRunning`: another daemon is alive,
+so the new one exits with code 1 before its control loop starts, without
+touching the GPU, Folding@home or the pause marker. Two loops would drive the
+same FAH client and share the marker (incident 2026-11-18).
 
 ### Group ownership under systemd
 
@@ -187,12 +190,14 @@ again.
   "gpu": {"name": "...", "temp_c": 61, "power_usage_w": 118, "used_vram_mib": 812, "total_vram_mib": 8192,
           "util_pct": 0, "in_use_mem_mib": 0},
   "battery": {"present": false, "on_ac": true, "charging": false, "pct": 100},
-  "fah": {"paused": false, "state": "folding", "active_project_id": 18264, "reachable": true,
+  "fah": {"paused": false, "state": "folding", "active_project_id": 18264, "cpus": 0, "reachable": true,
           "observed_at": "2026-11-16T02:13:01-03:00"},
   "game_sessions": [],
   "pause_list_supported": true,
   "pause_processes": ["blender"],
   "pause_matches": [],
+  "mac_profile": "",
+  "recommended_cpus": 0,
   "folding_seconds": 5025,
   "projects_contributed": [18264],
   "updated_at": "2026-11-16T02:13:01-03:00"
@@ -201,12 +206,18 @@ again.
 
 - `mode`: `starting`, `folding`, `folding_eco`, `paused_load`,
   `paused_battery`, `paused_thermal`, `paused_manual` or `degraded`.
-  `paused_thermal` is macOS's thermal guard: the system reported serious or
-  critical thermal pressure, and the pause lasts the load cooldown (two
-  minutes) after it drops.
+  `paused_thermal` is macOS's thermal guard: the system reported thermal
+  pressure at the profile's pause level (moderate on a fanless Mac, serious
+  otherwise), and the pause lasts the load cooldown (two minutes) after it
+  drops.
 - `manual_override`: `none` or `pause`.
 - `paused_by_us`: the current FAH pause is the daemon's, so the daemon will
-  resume it.
+  resume it. A `paused_manual` survives a daemon restart (the marker records
+  it); an automatic pause is resumed after the startup hold. If FAH is found
+  folding while `paused_by_us` is true, a load, battery or thermal pause is
+  applied again on the same tick, and anything else is treated as the user's
+  resume: `manual_override` goes back to `none`, `paused_by_us` to false and
+  the mode to the evaluator's.
 - `startup_hold`: `paused_by_us` is a pause inherited from the previous run
   that the startup hold still keeps (one cooldown after the daemon starts).
   A client can say "starting" instead of "resuming".
@@ -227,6 +238,11 @@ again.
   were first seen (at most 256). Both live in memory and start again with
   the daemon. A loop pass adds at most 3 ticks, so a suspended machine is not
   counted.
+- `mac_profile` is `fanless`, `active_laptop` or `desktop` on macOS and empty
+  on Linux. `recommended_cpus` is the CPU thread budget the daemon applies to
+  FAH's `cpus` option, and `fah.cpus` the value FAH reports (0 when not
+  reported). On Linux `recommended_cpus` is 0 and the daemon never changes
+  `cpus`.
 - `gpu`: with a simulated provider (macOS, the Linux stub) `temp_c`,
   `power_usage_w` and the VRAM fields are 0, and `name` comes from the
   collector (`Apple M4`). `util_pct` and `in_use_mem_mib` are the device-wide

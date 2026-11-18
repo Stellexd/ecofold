@@ -656,7 +656,13 @@ func TestParseFAHMessage(t *testing.T) {
 		{"idle: no units", `{"groups":{"":{"config":{}}}}`, Status{State: StateIdle}},
 		{"legacy top-level config", `{"config":{"paused":true},"units":[]}`, Status{Paused: true, State: StatePaused}},
 		{"unknown fields ignored", ` {"info":{"version":"8.5.6"},"config":{"paused":false,"cpus":8},"units":[{"state":"RUN","assignment":{"project":1}}],"extra":[1,2]} `,
-			Status{ActiveProjectID: 1, State: StateFolding}},
+			Status{ActiveProjectID: 1, State: StateFolding, CPUs: 8}},
+		{"cpus of the default group", `{"groups":{"":{"config":{"paused":true,"cpus":1}},"gpu":{"config":{"paused":true,"cpus":6}}}}`,
+			Status{Paused: true, State: StatePaused, CPUs: 1}},
+		{"cpus of a wrong type is ignored", `{"groups":{"":{"config":{"paused":true,"cpus":"4"}}}}`,
+			Status{Paused: true, State: StatePaused}},
+		{"cpus out of range is ignored", `{"groups":{"":{"config":{"paused":true,"cpus":-1}}}}`,
+			Status{Paused: true, State: StatePaused}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := parseFAHMessage([]byte(tc.msg))

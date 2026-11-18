@@ -28,6 +28,24 @@ type Status struct {
 	ActiveProjectID int
 	// State is one of StateFolding, StatePaused, StateIdle or StateUnknown.
 	State string
+	// CPUs is the "cpus" option of the default resource group (or of the
+	// top-level config on clients without groups): the CPU threads FAH may
+	// use. 0 means not reported.
+	CPUs int
+}
+
+// MaxCPUs bounds the value CPULimiter.SetCPUs accepts.
+const MaxCPUs = 1024
+
+// CPULimiter is implemented by controllers that can change how many CPU
+// threads Folding@home uses (FAH v8's "cpus" option). It is optional: the
+// daemon only limits CPU threads where the platform asks for it (macOS) and
+// the controller supports it.
+type CPULimiter interface {
+	// SetCPUs sets the default resource group's "cpus" to cpus (1 to
+	// MaxCPUs) and returns nil only once FAH reports the new value. Other
+	// resource groups and settings are left as they are.
+	SetCPUs(ctx context.Context, cpus int) error
 }
 
 // Controller pauses and resumes the local Folding@home client. Every method

@@ -86,8 +86,11 @@ sets `pausedByUs=true`.
 - Linux: `/run/ecofold/paused-by-daemon` (systemd `RuntimeDirectory=`; tmpfs is
   cleared on reboot, which also clears FAH's runtime pause ambiguity).
 - macOS dev: `$TMPDIR/ecofold/paused-by-daemon`.
-- Permissions are `0600`. The marker content is not trusted: only its presence
-  matters.
+- Permissions are `0600`. Its presence means ownership. Since 2026-11-18 it
+  holds the pause's origin, `auto` or `manual`; only a regular file is read
+  (`O_NOFOLLOW`, 64 bytes), and anything but `manual` (an empty marker from an
+  older build) reads as `auto`. A `manual` marker restarts the daemon in
+  `paused_manual` with no startup hold.
 
 Known accepted gaps (documented, not fixed):
 - If the user pauses by hand while the daemon also holds a pause, the daemon
@@ -208,6 +211,7 @@ Flags (`cmd/ecofold-daemon`):
 | `-tick` | `2s` | bounded to `[1s, 5s]` |
 | `-runtime-dir` | `/run/ecofold` on Linux, `$TMPDIR/ecofold` on macOS | marker location |
 | `-restore-power-limit` | `false` | one-shot: Init → RestoreDefault → Shutdown → exit (for `ExecStopPost`) |
+| `-pause-fah` | `false` | one-shot emergency stop: pause FAH (3 s timeout) → exit; no socket, no loop, no NVML |
 | `-fah-mock` | `false` | use `MockController` (macOS dev without FAH) |
 
 Logging uses `log/slog` (text output to stderr; journald captures it). After

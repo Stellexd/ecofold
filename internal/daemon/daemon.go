@@ -195,6 +195,19 @@ type Daemon struct {
 	sessions       []string
 	pauseMatches   []string
 
+	// macProfile and recommendedCPUs come from the last snapshot (macOS).
+	macProfile      detector.MacThermalProfile
+	recommendedCPUs int
+
+	// FAH CPU threads (macOS), handled like the GPU power limit: the user's
+	// value is recorded before the first change and restored on exit.
+	// cpuLimiter is nil when the FAH controller cannot change cpus.
+	cpuLimiter   fah.CPULimiter
+	originalCPUs int  // FAH's cpus before the daemon's first change; 0 until read
+	cpusChanged  bool // the daemon has sent SetCPUs (it may have landed)
+	cpusApplied  int  // the value FAH confirmed last; 0 when unknown
+	cpuErrs      int
+
 	// Contribution of this run, for Status. See accountFolding.
 	foldingTime time.Duration
 	projects    []int
@@ -232,20 +245,22 @@ func New(cfg Config, deps Deps) (*Daemon, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	limiter, _ := deps.FAH.(fah.CPULimiter)
 	return &Daemon{
-		cfg:       cfg,
-		log:       cfg.Logger,
-		gpu:       deps.GPU,
-		fah:       deps.FAH,
-		collector: deps.Collector,
-		eval:      deps.Evaluator,
-		marker:    marker{dir: cfg.RuntimeDir},
-		cmds:      make(chan *command, cmdQueue),
-		stopping:  make(chan struct{}),
-		mode:      ModeStarting,
-		manual:    OverrideNone,
-		fahStatus: FAHStatus{State: fah.StateUnknown},
-		fahAge:    fahRefreshTicks, // read FAH on the first loop pass
+		cpuLimiter: limiter,
+		cfg:        cfg,
+		log:        cfg.Logger,
+		gpu:        deps.GPU,
+		fah:        deps.FAH,
+		collector:  deps.Collector,
+		eval:       deps.Evaluator,
+		marker:     marker{dir: cfg.RuntimeDir},
+		cmds:       make(chan *command, cmdQueue),
+		stopping:   make(chan struct{}),
+		mode:       ModeStarting,
+		manual:     OverrideNone,
+		fahStatus:  FAHStatus{State: fah.StateUnknown},
+		fahAge:     fahRefreshTicks, // read FAH on the first loop pass
 	}, nil
 }
 
@@ -326,12 +341,18 @@ func (d *Daemon) start() error {
 		}
 	}
 
-	owned, err := d.marker.present()
+	origin, owned, err := d.marker.read()
 	if err != nil {
 		d.log.Warn("could not read the pause marker; assuming the current pause is not ours", "err", err)
 	}
 	d.pausedByUs = owned
-	if owned {
+	switch {
+	case owned && origin == originManual:
+		// The user's ForcePause outlives the restart: no startup hold, and
+		// nothing resumes until ForceResume.
+		d.manual = OverridePause
+		d.mode = ModePausedManual
+	case owned:
 		d.resumeHold = d.cfg.StartupHoldTicks
 	}
 
@@ -350,6 +371,7 @@ func (d *Daemon) start() error {
 		"power_limit_supported", d.powerCapable,
 		"eco_watts", d.ecoWatts,
 		"paused_by_daemon", d.pausedByUs,
+		"manual_pause", d.manual == OverridePause,
 		"tick", d.cfg.Tick)
 	return nil
 }
@@ -433,6 +455,7 @@ func (d *Daemon) tick(ctx context.Context) {
 		d.gpuName = snap.GPUClass
 	}
 	d.gpuUtilPct, d.gpuInUseMemMiB = snap.GPUDeviceUtilPct, snap.GPUInUseMemMiB
+	d.macProfile, d.recommendedCPUs = snap.MacProfile, snap.RecommendedCPUs
 
 	d.apply(ctx, d.eval.Evaluate(snap))
 }
@@ -472,7 +495,7 @@ func (d *Daemon) apply(ctx context.Context, decision detector.OperatingState) {
 			// The inherited pause may still belong to a running game: keep
 			// the default limit until the hold ends.
 			d.restoreIfCapped()
-		case d.applyCap() && d.pausedByUs:
+		case d.applyCap() && d.ensureCPUs(ctx) && d.pausedByUs:
 			d.pending = opResume
 		}
 	}
@@ -517,6 +540,72 @@ func (d *Daemon) applyCap() bool {
 	d.capApplied, d.limitUnknown = true, false
 	d.log.Info("eco power limit applied", "watts", d.ecoWatts)
 	return true
+}
+
+// ensureCPUs sets FAH's cpus to the recommended budget when FAH is not
+// known to use it already, and reports whether folding may resume. It runs
+// before every resume (like the eco cap, I2) and on every folding tick, so a
+// budget that changes with the power source or the thermal level reaches FAH
+// while it folds. The user's value is read and kept before the first change.
+// Without a budget (Linux) or a limiter it does nothing.
+func (d *Daemon) ensureCPUs(ctx context.Context) bool {
+	target := d.recommendedCPUs
+	if target <= 0 || d.cpuLimiter == nil || d.cpusApplied == target {
+		return true
+	}
+	if d.originalCPUs == 0 {
+		st, err := d.readFAH(ctx)
+		if err != nil || st.CPUs <= 0 {
+			d.cpuFailed("could not read Folding@home's cpus; folding stays paused", err)
+			return false
+		}
+		d.originalCPUs = st.CPUs
+		if st.CPUs == target {
+			d.cpusApplied = target
+			return true
+		}
+	}
+	actx, cancel := context.WithTimeout(ctx, d.cfg.ActionTimeout)
+	defer cancel()
+	d.cpusChanged = true
+	if err := d.cpuLimiter.SetCPUs(actx, target); err != nil {
+		d.cpusApplied = 0
+		d.cpuFailed("could not limit Folding@home's cpus; folding stays paused", err)
+		return false
+	}
+	d.cpuErrs = 0
+	d.cpusApplied = target
+	d.fahStatus.CPUs = target
+	d.log.Info("folding@home cpu threads set", "cpus", target, "user_cpus", d.originalCPUs, "profile", d.macProfile)
+	return true
+}
+
+func (d *Daemon) cpuFailed(msg string, err error) {
+	d.cpuErrs++
+	if d.cpuErrs == 1 || d.cpuErrs%collectErrLogEvery == 0 {
+		d.log.Warn(msg, "cpus", d.recommendedCPUs, "err", err, "consecutive", d.cpuErrs)
+	}
+}
+
+// restoreCPUs puts back the cpus FAH had before the daemon changed them,
+// within RestoreTimeout. On a fanless Mac this can bring back the load that
+// overheated it; the log says so.
+func (d *Daemon) restoreCPUs() error {
+	if !d.cpusChanged || d.originalCPUs <= 0 || d.cpuLimiter == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), d.cfg.RestoreTimeout)
+	defer cancel()
+	if err := d.cpuLimiter.SetCPUs(ctx, d.originalCPUs); err != nil {
+		d.log.Error("could not restore Folding@home's cpus on exit", "cpus", d.originalCPUs, "err", err)
+		return fmt.Errorf("daemon: restore fah cpus: %w", err)
+	}
+	d.log.Info("folding@home cpus restored on exit", "cpus", d.originalCPUs)
+	if d.macProfile == detector.ProfileFanless && d.originalCPUs > 1 && !d.fahStatus.Paused {
+		d.log.Warn("folding@home keeps folding with the restored cpus on a fanless Mac; "+
+			"pause it with ecofold-daemon -pause-fah if EcoFold stays off", "cpus", d.originalCPUs)
+	}
+	return nil
 }
 
 // restoreIfCapped restores the default power limit when the eco cap may be in
@@ -582,9 +671,7 @@ func (d *Daemon) runPending(ctx context.Context) {
 	}
 	if op == "pause" {
 		d.pausedByUs = true
-		if err := d.marker.set(); err != nil {
-			d.log.Warn("could not write the pause marker", "err", err)
-		}
+		d.writeMarker()
 		d.log.Info("folding paused")
 		return
 	}
@@ -595,8 +682,20 @@ func (d *Daemon) runPending(ctx context.Context) {
 	d.log.Info("folding resumed")
 }
 
-// failSafe restores the default power limit within RestoreTimeout and
-// releases the controllers. When the loop or the restore is stuck inside a
+// writeMarker records the daemon's pause with its origin: manual while the
+// override is set, so a manual pause is never downgraded to auto.
+func (d *Daemon) writeMarker() {
+	origin := originAuto
+	if d.manual == OverridePause {
+		origin = originManual
+	}
+	if err := d.marker.set(origin); err != nil {
+		d.log.Warn("could not write the pause marker", "err", err)
+	}
+}
+
+// failSafe restores the default power limit and FAH's cpus within
+// RestoreTimeout each and releases the controllers. When the loop or the restore is stuck inside a
 // GPU call, Shutdown is skipped because it would block on the same call.
 func (d *Daemon) failSafe(loopHung bool) error {
 	var errs []error
@@ -617,6 +716,15 @@ func (d *Daemon) failSafe(loopHung bool) error {
 			d.log.Error("power limit restore timed out on exit", "timeout", d.cfg.RestoreTimeout)
 			errs = append(errs, errors.New("daemon: restore power limit: timed out"))
 		}
+	}
+	// The cpus fields belong to the loop goroutine: with the loop stuck they
+	// cannot be read safely, and the restore is skipped.
+	if loopHung {
+		if d.cpuLimiter != nil {
+			d.log.Error("control loop stuck; folding@home's cpus were not restored")
+		}
+	} else if err := d.restoreCPUs(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := d.fah.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("daemon: close fah: %w", err))

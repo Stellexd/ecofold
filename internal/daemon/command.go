@@ -119,6 +119,13 @@ type Status struct {
 	PauseProcesses []string `json:"pause_processes"`
 	PauseMatches   []string `json:"pause_matches"`
 
+	// MacProfile is the Mac's cooling class ("fanless", "active_laptop",
+	// "desktop"); empty on Linux. RecommendedCPUs is the CPU thread budget
+	// for Folding@home from the last snapshot; 0 means the daemon leaves
+	// FAH's cpus alone (Linux).
+	MacProfile      string `json:"mac_profile"`
+	RecommendedCPUs int    `json:"recommended_cpus"`
+
 	// FoldingSeconds is the time Folding@home was seen running a work unit
 	// since the daemon started, and ProjectsContributed the projects of
 	// those work units, in the order they were first seen. Both are kept in
@@ -162,6 +169,8 @@ type FAHStatus struct {
 	State string `json:"state"`
 	// ActiveProjectID is the project of the running work unit, or 0.
 	ActiveProjectID int `json:"active_project_id"`
+	// CPUs is FAH's "cpus" option (default group); 0 when not reported.
+	CPUs int `json:"cpus"`
 	// Reachable is false when the last call failed; the fields above then
 	// hold the last known values.
 	Reachable bool `json:"reachable"`
@@ -225,6 +234,8 @@ func (d *Daemon) publish() Status {
 		PauseListSupported:  d.pauseListSupported(),
 		PauseProcesses:      d.pauseProcesses,
 		PauseMatches:        d.pauseMatches,
+		MacProfile:          string(d.macProfile),
+		RecommendedCPUs:     d.recommendedCPUs,
 		FoldingSeconds:      int64(d.foldingTime / time.Second),
 		ProjectsContributed: d.projects,
 		UpdatedAt:           time.Now(),
@@ -403,8 +414,12 @@ func (d *Daemon) forcePause(ctx context.Context) error {
 	d.restoreIfCapped()
 
 	if st, err := d.readFAH(ctx); err == nil && st.Paused {
-		// Already paused: ours stays ours, the user's stays the user's.
+		// Already paused: ours stays ours, the user's stays the user's. Our
+		// own pause becomes manual, so a restart keeps it.
 		d.pending = opNone
+		if d.pausedByUs {
+			d.writeMarker()
+		}
 	} else {
 		d.pending = opPause
 		d.runPending(ctx)
@@ -424,8 +439,13 @@ func (d *Daemon) forcePause(ctx context.Context) error {
 func (d *Daemon) forceResume(ctx context.Context) error {
 	if d.manual != OverrideNone {
 		d.log.Info("manual pause cleared")
+		d.manual = OverrideNone
+		if d.pausedByUs {
+			// What is left is an automatic pause: a restart before the
+			// resume lands must resume it, not keep it as manual.
+			d.writeMarker()
+		}
 	}
-	d.manual = OverrideNone
 	if !d.degraded {
 		if !d.haveDecision {
 			d.mode = ModeStarting
@@ -446,6 +466,9 @@ func (d *Daemon) forceResume(ctx context.Context) error {
 	d.resumeHold = 0
 	if d.powerEnabled && !d.applyCap() {
 		return fmt.Errorf("%w: folding stays paused", ErrCapFailed)
+	}
+	if !d.ensureCPUs(ctx) {
+		return fmt.Errorf("%w: could not limit its cpu threads, folding stays paused", ErrFAHUnavailable)
 	}
 
 	if st, err := d.readFAH(ctx); err == nil && !st.Paused {
@@ -534,13 +557,49 @@ func (d *Daemon) readFAH(ctx context.Context) (fah.Status, error) {
 }
 
 // refreshFAH reads the FAH status again when the last observation is
-// fahRefreshTicks ticks old. It only feeds Status: decisions read FAH
-// themselves when they need it.
+// fahRefreshTicks ticks old. It feeds Status and catches FAH folding while
+// the daemon believes it holds a pause (see reconcileResume); other decisions
+// read FAH themselves when they need it.
 func (d *Daemon) refreshFAH(ctx context.Context) {
 	if d.fahAge++; d.fahAge < fahRefreshTicks {
 		return
 	}
-	_, _ = d.readFAH(ctx)
+	if st, err := d.readFAH(ctx); err == nil && !st.Paused && d.pausedByUs {
+		d.reconcileResume(ctx)
+	}
+}
+
+// reconcileResume handles FAH found unpaused while the daemon owns the pause
+// (incident 2026-11-18, 3.3). During a load, battery or thermal pause the
+// reason still holds, so FAH is paused again on this pass. Otherwise the
+// resume came from outside EcoFold, most likely the user in FAH's own UI, and
+// it stays theirs (CH-10): ownership, the manual override and the marker are
+// dropped, so the status stops reporting a pause that is not there.
+func (d *Daemon) reconcileResume(ctx context.Context) {
+	if !d.degraded && d.haveDecision && isPause(d.lastDecision) {
+		d.log.Warn("folding@home resumed outside EcoFold during a protective pause; pausing it again", "mode", d.mode)
+		d.pending = opPause
+		d.runPending(ctx)
+		return
+	}
+	if d.manual == OverridePause {
+		d.log.Info("folding@home resumed outside EcoFold; manual pause cleared")
+		d.manual = OverrideNone
+	} else {
+		d.log.Info("folding@home resumed outside EcoFold; the daemon no longer owns a pause")
+	}
+	d.pausedByUs = false
+	d.pending = opNone
+	d.resumeHold = 0
+	if err := d.marker.clear(); err != nil {
+		d.log.Warn("could not remove the pause marker", "err", err)
+	}
+	if !d.degraded {
+		d.mode = ModeStarting
+		if d.haveDecision {
+			d.mode = Mode(d.lastDecision)
+		}
+	}
 }
 
 // observeFAH records the outcome of a FAH call. On failure the last known
@@ -553,6 +612,13 @@ func (d *Daemon) observeFAH(st fah.Status, err error) {
 		d.fahStatus.Paused = st.Paused
 		d.fahStatus.State = st.State
 		d.fahStatus.ActiveProjectID = st.ActiveProjectID
+		if st.CPUs > 0 {
+			d.fahStatus.CPUs = st.CPUs
+			if d.cpusApplied > 0 && st.CPUs != d.cpusApplied {
+				// Changed outside EcoFold: apply the budget again.
+				d.cpusApplied = 0
+			}
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -22,9 +23,16 @@ const ipcShutdownGrace = time.Second
 // restores the power limit. The socket also closes when Run ends on its own.
 //
 // A socket that cannot be created is logged and the daemon runs without IPC:
-// capping and restoring the GPU must not depend on the GUI's channel.
+// capping and restoring the GPU must not depend on the GUI's channel. The
+// exception is ipc.ErrAlreadyRunning: another daemon is alive, and two loops
+// would drive the same FAH client and share the pause marker (incident
+// 2026-11-18). serve then returns the error before Run, so neither the GPU,
+// FAH nor the marker is touched.
 func serve(ctx context.Context, logger *slog.Logger, d *daemon.Daemon, socketPath, socketGroup string) error {
-	shutdown := startIPC(logger, d, socketPath, socketGroup)
+	shutdown, err := startIPC(logger, d, socketPath, socketGroup)
+	if err != nil {
+		return err
+	}
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	defer cancelRun()
@@ -38,23 +46,28 @@ func serve(ctx context.Context, logger *slog.Logger, d *daemon.Daemon, socketPat
 		}
 	}()
 
-	err := d.Run(runCtx)
+	err = d.Run(runCtx)
 	close(runDone)
 	shutdown()
 	return err
 }
 
-// startIPC opens the socket and returns the function that closes it. On
-// failure, or with an empty path, it returns a no-op.
-func startIPC(logger *slog.Logger, d *daemon.Daemon, path, group string) (shutdown func()) {
+// startIPC opens the socket and returns the function that closes it. With an
+// empty path, or when the socket cannot be created, it returns a no-op; when
+// another daemon already serves the socket it returns an error wrapping
+// ipc.ErrAlreadyRunning.
+func startIPC(logger *slog.Logger, d *daemon.Daemon, path, group string) (shutdown func(), err error) {
 	if path == "" {
 		logger.Warn("ipc disabled: no socket path")
-		return func() {}
+		return func() {}, nil
 	}
 	srv, err := ipc.Listen(ipc.Config{Path: path, Group: group, Handler: handler{d: d}, Logger: logger})
+	if errors.Is(err, ipc.ErrAlreadyRunning) {
+		return nil, fmt.Errorf("another ecofold-daemon is already running: %w", err)
+	}
 	if err != nil {
 		logger.Error("ipc unavailable; the daemon keeps running without it", "socket", path, "err", err)
-		return func() {}
+		return func() {}, nil
 	}
 	logger.Info("ipc listening", "socket", path)
 	go func() { _ = srv.Serve() }()
@@ -65,7 +78,7 @@ func startIPC(logger *slog.Logger, d *daemon.Daemon, path, group string) (shutdo
 		if err := srv.Shutdown(ctx); err != nil {
 			logger.Warn("ipc shutdown did not finish in time", "err", err)
 		}
-	}
+	}, nil
 }
 
 // handler adapts the daemon to ipc.Handler. Status reads the published

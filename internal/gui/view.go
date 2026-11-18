@@ -51,6 +51,7 @@ type Status struct {
 		Paused          bool      `json:"paused"`
 		State           string    `json:"state"`
 		ActiveProjectID int       `json:"active_project_id"`
+		CPUs            int       `json:"cpus"`
 		Reachable       bool      `json:"reachable"`
 		ObservedAt      time.Time `json:"observed_at"`
 	} `json:"fah"`
@@ -59,6 +60,10 @@ type Status struct {
 	PauseListSupported bool     `json:"pause_list_supported"`
 	PauseProcesses     []string `json:"pause_processes"`
 	PauseMatches       []string `json:"pause_matches"`
+	// MacProfile and RecommendedCPUs describe how the daemon limits FAH's
+	// CPU threads on macOS; empty and 0 on Linux.
+	MacProfile      string `json:"mac_profile"`
+	RecommendedCPUs int    `json:"recommended_cpus"`
 	// FoldingSeconds and ProjectsContributed count this run of the daemon.
 	FoldingSeconds      int64     `json:"folding_seconds"`
 	ProjectsContributed []int     `json:"projects_contributed"`

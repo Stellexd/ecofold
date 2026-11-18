@@ -342,6 +342,82 @@ func TestServeWithoutSocket(t *testing.T) {
 	}
 }
 
+// TestServeRefusesSecondInstance (incident 2026-11-18): a daemon whose socket
+// is held by a live daemon must exit with an error before its loop starts,
+// leaving the GPU, FAH and the pause marker exactly as they were.
+func TestServeRefusesSecondInstance(t *testing.T) {
+	first := newFixture(t)
+	first.start(t, first.socket)
+
+	second := newFixture(t)
+	runDir := filepath.Join(second.dir, "run")
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(runDir, "paused-by-daemon")
+	if err := os.WriteFile(marker, []byte("manual\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.fah.Pause(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	done := make(chan error, 1)
+	go func() { done <- serve(context.Background(), logger, second.d, first.socket, "") }()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("serve siguió corriendo con el socket ocupado")
+	}
+	if !errors.Is(err, ipc.ErrAlreadyRunning) {
+		t.Fatalf("err = %v, se esperaba ErrAlreadyRunning", err)
+	}
+	if st := second.d.Status(); st.Mode != daemon.ModeStarting {
+		t.Fatalf("el segundo daemon llegó a correr: %+v", st)
+	}
+	if limit, restores, _ := second.gpu.state(); limit != 145 || restores != 0 {
+		t.Fatalf("el segundo daemon tocó la GPU: %d W, %d restauraciones", limit, restores)
+	}
+	if st, _ := second.fah.GetStatus(context.Background()); !st.Paused {
+		t.Fatal("el segundo daemon reanudó FAH")
+	}
+	if got, err := os.ReadFile(marker); err != nil || string(got) != "manual\n" {
+		t.Fatalf("el marcador cambió: %q, %v", got, err)
+	}
+
+	// The first daemon still answers.
+	c, err := ipc.Dial(context.Background(), first.socket)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer c.Close()
+	if _, err := call(t, c, ipc.CmdStatus, nil); err != nil {
+		t.Fatalf("el primer daemon dejó de responder: %v", err)
+	}
+}
+
+// TestPauseFAH covers the -pause-fah emergency stop.
+func TestPauseFAH(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	m := fah.NewMockController(18803)
+	if code := pauseFAH(logger, m); code != 0 {
+		t.Fatalf("código = %d, se esperaba 0", code)
+	}
+	m.SetError(nil)
+	if _, err := m.GetStatus(context.Background()); !errors.Is(err, fah.ErrClosed) {
+		t.Fatalf("el controlador no se cerró: %v", err)
+	}
+
+	m = fah.NewMockController(18803)
+	m.SetError(errors.New("connection refused"))
+	if code := pauseFAH(logger, m); code == 0 {
+		t.Fatal("un FAH inalcanzable debía devolver un código distinto de cero")
+	}
+}
+
 // TestCommandsDuringShutdown: clients hammering the socket
 // while the daemon stops never hang and never see a wrong success.
 func TestCommandsDuringShutdown(t *testing.T) {

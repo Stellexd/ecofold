@@ -68,7 +68,7 @@ func TestStartupRestoreFailureRestoresOnFirstPause(t *testing.T) {
 // after a failed startup restore must not be mistaken for an applied cap.
 func TestStartupRestoreFailureStillCapsWhileFolding(t *testing.T) {
 	h := newHarness(t, true)
-	if err := (marker{dir: h.dir}).set(); err != nil {
+	if err := (marker{dir: h.dir}).set(originAuto); err != nil {
 		t.Fatalf("marker.set: %v", err)
 	}
 	h.gpu.set(func(g *fakeGPU) { g.restoreErr = errors.New("nvml ocupado") })
@@ -450,7 +450,7 @@ func TestPendingPauseDroppedWhenDecisionFlips(t *testing.T) {
 // pause.
 func TestMarkerRestoresOwnershipAfterRestart(t *testing.T) {
 	h := newHarness(t, true)
-	if err := (marker{dir: h.dir}).set(); err != nil {
+	if err := (marker{dir: h.dir}).set(originAuto); err != nil {
 		t.Fatalf("marker.set: %v", err)
 	}
 	h.fah.set(func(f *fakeFAH) { f.status = fah.Status{Paused: true, State: fah.StatePaused} })
@@ -481,7 +481,7 @@ func TestMarkerRestoresOwnershipAfterRestart(t *testing.T) {
 // sees load keeps owning its old pause without pausing again.
 func TestMarkerKeptWhenRestartFindsLoad(t *testing.T) {
 	h := newHarness(t, false)
-	if err := (marker{dir: h.dir}).set(); err != nil {
+	if err := (marker{dir: h.dir}).set(originAuto); err != nil {
 		t.Fatalf("marker.set: %v", err)
 	}
 	h.fah.set(func(f *fakeFAH) { f.status = fah.Status{Paused: true, State: fah.StatePaused} })
@@ -643,7 +643,7 @@ func TestNewValidatesDeps(t *testing.T) {
 // again, and the game keeps the default limit through the new pause.
 func TestRestartDuringGameKeepsDefaultLimit(t *testing.T) {
 	h := newHarness(t, true)
-	if err := (marker{dir: h.dir}).set(); err != nil {
+	if err := (marker{dir: h.dir}).set(originAuto); err != nil {
 		t.Fatalf("marker.set: %v", err)
 	}
 	h.fah.set(func(f *fakeFAH) { f.status = fah.Status{Paused: true, State: fah.StatePaused} })

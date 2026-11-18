@@ -81,3 +81,38 @@ func TestGameLoadOutranksThermal(t *testing.T) {
 		t.Fatalf("sin juego, aún caliente: %q", got)
 	}
 }
+
+// TestFanlessPausesAtModeratePressure: a fanless Mac pauses at level 1 and
+// stays paused until the level has been 0 for the whole cooldown; other
+// profiles keep the level 2 threshold.
+func TestFanlessPausesAtModeratePressure(t *testing.T) {
+	cfg := DefaultConfig()
+	e := NewEvaluator(cfg)
+	fanless := SystemSnapshot{HasBattery: true, OnAC: true, BatteryPct: 90, MacProfile: ProfileFanless}
+
+	hot := fanless
+	hot.ThermalLevel = ThermalPressureModerate
+	if got := e.Evaluate(hot); got != StatePausedThermal {
+		t.Fatalf("sin ventilador a nivel 1: %s", got)
+	}
+	for i := 1; i < cfg.CooldownTicksRequired; i++ {
+		if got := e.Evaluate(fanless); got != StatePausedThermal {
+			t.Fatalf("tick %d del enfriamiento: %s", i, got)
+		}
+	}
+	if got := e.Evaluate(fanless); got != StateFolding {
+		t.Fatalf("tras el enfriamiento: %s", got)
+	}
+
+	for _, p := range []MacThermalProfile{"", ProfileActiveLaptop, ProfileDesktop} {
+		e := NewEvaluator(cfg)
+		s := SystemSnapshot{OnAC: true, ThermalLevel: ThermalPressureModerate, MacProfile: p}
+		if got := e.Evaluate(s); got != StateFolding {
+			t.Fatalf("perfil %q a nivel 1: %s", p, got)
+		}
+		s.ThermalLevel = ThermalPressureSerious
+		if got := e.Evaluate(s); got != StatePausedThermal {
+			t.Fatalf("perfil %q a nivel 2: %s", p, got)
+		}
+	}
+}

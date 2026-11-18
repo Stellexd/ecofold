@@ -302,7 +302,7 @@ func TestForceResumeInDegraded(t *testing.T) {
 // of an inherited pause, and the next ticks keep the cap.
 func TestForceResumeDuringStartupHold(t *testing.T) {
 	h := newHarness(t, true)
-	if err := (marker{dir: h.dir}).set(); err != nil {
+	if err := (marker{dir: h.dir}).set(originAuto); err != nil {
 		t.Fatalf("marker.set: %v", err)
 	}
 	h.userPausesFAH() // FAH is paused, and the marker says it is ours
