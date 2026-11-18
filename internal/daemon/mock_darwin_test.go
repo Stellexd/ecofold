@@ -4,7 +4,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"testing"
 
@@ -73,13 +72,12 @@ func TestDaemonWithRealMocks(t *testing.T) {
 	}
 }
 
-// TestDarwinCollectorHasNoPauseList pins the macOS contract: the collector
-// cannot see processes, so set_pause_processes is refused, not accepted and
-// ignored.
-func TestDarwinCollectorHasNoPauseList(t *testing.T) {
+// TestDarwinCollectorHasPauseList pins the macOS contract: the collector
+// lists processes, so set_pause_processes is accepted and reported.
+func TestDarwinCollectorHasPauseList(t *testing.T) {
 	col := detector.NewDarwinCollector()
-	if _, ok := any(col).(PauseListSetter); ok {
-		t.Fatal("DarwinCollector no debe implementar PauseListSetter")
+	if _, ok := any(col).(PauseListSetter); !ok {
+		t.Fatal("DarwinCollector debe implementar PauseListSetter")
 	}
 
 	cfg := DefaultConfig()
@@ -97,11 +95,18 @@ func TestDarwinCollectorHasNoPauseList(t *testing.T) {
 	if err := d.start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	err = d.exec(context.Background(), &command{kind: cmdSetPauseProcesses, patterns: []string{"blender"}})
-	if !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("err = %v, se esperaba ErrUnsupported", err)
+	if err := d.exec(context.Background(), &command{kind: cmdSetPauseProcesses, patterns: []string{"blender"}}); err != nil {
+		t.Fatalf("set_pause_processes: %v", err)
 	}
-	if st := d.publish(); len(st.PauseProcesses) != 0 {
-		t.Fatalf("la lista rechazada aparece en el status: %v", st.PauseProcesses)
+	st := d.publish()
+	if !st.PauseListSupported || len(st.PauseProcesses) != 1 || st.PauseProcesses[0] != "blender" {
+		t.Fatalf("status = supported %v, lista %v", st.PauseListSupported, st.PauseProcesses)
+	}
+}
+
+func TestFormatGPUApps(t *testing.T) {
+	got := formatGPUApps([]detector.GPUAppUsage{{PID: 812, Name: "Safari", GPUTimePct: 31}, {PID: 9, Name: "VSCodium Helper", GPUTimePct: 2}})
+	if want := "Safari[812]=31% VSCodium Helper[9]=2%"; got != want {
+		t.Fatalf("formatGPUApps = %q, se esperaba %q", got, want)
 	}
 }

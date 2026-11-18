@@ -15,7 +15,16 @@ The collector uses macOS system utilities and the Python 3 standard library; it 
 - The profile reads `hw.model` and `machdep.cpu.brand_string` with `sysctl`; it obtains the macOS version through Python's `platform.mac_ver()`.
 - The collector does not call `nvidia-smi` or `powermetrics`, and does not invoke `sudo`.
 
-The Go daemon's `DarwinCollector` reads the same `ioreg` classes, plus the thermal pressure level (see "Thermal guard") and, once, the model and core counts through `/usr/sbin/sysctl -n hw.model hw.physicalcpu hw.perflevel0.physicalcpu hw.perflevel1.physicalcpu` (see "Hardware profile and FAH CPU threads").
+The Go daemon's `DarwinCollector` reads the same `ioreg` classes, plus the thermal pressure level (see "Thermal guard") and, once, the model and core counts through `/usr/sbin/sysctl -n hw.model hw.physicalcpu hw.perflevel0.physicalcpu hw.perflevel1.physicalcpu` (see "Hardware profile and FAH CPU threads"). It reads `IOAccelerator` with `ioreg -a -r -d 2 -l -c IOAccelerator`, which also returns each GPU client's `AppUsage` (see "Per-process view"), and lists processes with `sysctl kern.proc.all` while a pause list is set.
+
+## Per-process view
+
+macOS has no `/proc`, but two unprivileged sources name processes:
+
+- **Running processes:** `sysctl kern.proc.all`, read in Go with `unix.SysctlKinfoProcSlice` (no cgo, no external command). `p_comm` is cut to 16 bytes; `kern.procargs2` gives the full executable path for the user's own processes. The pause list (`-pause-processes`, `set_pause_processes`) uses it and works on macOS. Seen on the M4: `Safari`, `Calculator`, and `NotificationCent` for Notification Center.
+- **GPU time per app:** each user client of the accelerator (`AGXDeviceUserClient` on the M4) has `IOUserClientCreator` (`pid 604, WindowServer`) and `AppUsage`, one entry per command queue with `accumulatedGPUTime` in nanoseconds. `ioreg -a` only includes these properties with `-l`. Over 2 s at rest, WindowServer used about 4-6 % and VSCodium Helper 2 % while `Device Utilization %` read 4-16 %. The daemon reports the figures in `SystemSnapshot.GPUApps` and logs them with `-debug`; no threshold uses them yet.
+
+`powermetrics` would give more, but it needs root and is not used.
 
 ## Thermal guard
 
@@ -194,7 +203,7 @@ In that charging snapshot, `net_battery_flow_mw` was `+23,537 mW`, wall input wa
 
 - **Battery temperature is unavailable without changing the privilege model.** The M4's `AppleSmartBattery` node does not expose `Temperature`; `DeadBatteryBootData.GeneralPayload.AverageBattSkinTemp` and `AverageBattVirtualTemp` are always `0` in the observed captures. Unprivileged `pmset -g therm` reports historical thermal events rather than live sensors and provides no readings on a healthy device. `powermetrics` requires root, while the GUI must run unprivileged. The collector therefore stores `batt_temp_c` as SQL `NULL`; temperature must not be used for macOS detection. The thermal guard uses the system's thermal pressure level instead.
 - **`TimeRemaining` uses a sentinel.** `65535` (`0xFFFF`) means unknown and is stored as `NULL`; zero is also left `NULL`. A discharge capture reported 219 minutes, while charging reported `65535`.
-- **Apple GPU telemetry is partial.** `AGXAcceleratorG16G` exposes `PerformanceStatistics`, including `Device Utilization %`, `Renderer Utilization %`, `Tiler Utilization %`, `In use system memory`, and `Alloc system memory`. The collector stores the in-use system-memory value (converted from bytes to MiB), not the allocation value. The measurements do not expose GPU temperature, power, or total VRAM. Idle utilization was already about 24%, so absolute GPU-utilization thresholds risk false positives; use a baseline/delta or combine GPU data with process information.
+- **Apple GPU telemetry is partial.** `AGXAcceleratorG16G` exposes `PerformanceStatistics`, including `Device Utilization %`, `Renderer Utilization %`, `Tiler Utilization %`, `In use system memory`, and `Alloc system memory`. The collector stores the in-use system-memory value (converted from bytes to MiB), not the allocation value. The measurements do not expose GPU temperature, power, or total VRAM. Idle utilization was already about 24%, so absolute GPU-utilization thresholds risk false positives; use a baseline/delta or combine GPU data with process information. Per-app GPU time is now available (see "Per-process view") but is not calibrated.
 - **There is no Apple Silicon TDP control through this provider.** The SoC firmware manages the GPU's power behavior. On macOS, `MockProvider` reports `SupportsPowerLimit = false`; GPU power limiting is unsupported.
 - **Battery health is noisy.** `AppleRawMaxCapacity` can recalibrate over minutes (4,493 to 4,516 mAh was observed). Treat the computed percentage as an estimate.
 - **Go provider units are intentionally coarser than raw measurements.** `gpu.Telemetry` exposes integer watts and MiB. `mwToW` uses integer division and truncates (for example, 144.9 W becomes 144 W). `NvidiaProvider` selects NVIDIA device index 0; it does not enumerate multiple GPUs.

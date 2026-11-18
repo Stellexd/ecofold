@@ -348,11 +348,26 @@ const fetchIORegTimeout = 2 * time.Second
 // canceled or its deadline passes, and never runs longer than
 // fetchIORegTimeout.
 func FetchIORegContext(ctx context.Context, class string) ([]byte, error) {
+	return runIOReg(ctx, class, "-a", "-r", "-d", "1", "-c", class)
+}
+
+// FetchIOAcceleratorClientsContext runs `ioreg -a -r -d 2 -l -c
+// IOAccelerator`: the IOAccelerator node, as FetchIORegContext returns it,
+// plus its user clients with their properties (IOUserClientCreator,
+// AppUsage). Without -l the archive omits the clients' properties. The
+// bounds are FetchIORegContext's.
+func FetchIOAcceleratorClientsContext(ctx context.Context) ([]byte, error) {
+	return runIOReg(ctx, "IOAccelerator", "-a", "-r", "-d", "2", "-l", "-c", "IOAccelerator")
+}
+
+// runIOReg runs /usr/sbin/ioreg with args, bounded as FetchIORegContext
+// documents. class names the output in errors.
+func runIOReg(ctx context.Context, class string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchIORegTimeout)
 	defer cancel()
 
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "/usr/sbin/ioreg", "-a", "-r", "-d", "1", "-c", class)
+	cmd := exec.CommandContext(ctx, "/usr/sbin/ioreg", args...)
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

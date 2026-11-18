@@ -49,7 +49,7 @@ func run() int {
 		restoreOnly = flag.Bool("restore-power-limit", false, "restore the default GPU power limit and exit (for systemd ExecStopPost)")
 		pauseOnly   = flag.Bool("pause-fah", false, "pause Folding@home and exit (emergency stop; works without a running daemon)")
 		verbose     = flag.Bool("debug", false, "enable debug logging")
-		pauseList   = flag.String("pause-processes", "", "comma-separated process names that stop folding while they run, e.g. \"blender,obs\" (Linux; trailing * is a prefix match)")
+		pauseList   = flag.String("pause-processes", "", "comma-separated process names that stop folding while they run, e.g. \"blender,obs\" (trailing * is a prefix match)")
 		socketPath  = flag.String("socket-path", defSocket, "Unix socket for the GUI; empty disables IPC")
 		socketGroup = socketGroupFlag()
 	)
