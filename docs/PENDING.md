@@ -25,11 +25,30 @@ Last updated: 2026-11-18 (macOS pause list and per-app GPU time).
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
 3. M3 is written: the IPC backend is verified on CachyOS, the GUI is
-   implemented and the pause list works on macOS. Left on hardware to close
-   M3: the GUI on the CachyOS desktop (checklist in section 3), the M4 Air
-   folding with the CPU budget, the macOS pause list resuming after the
-   cooldown on AC, and the unit without the `ecofold` group; then the
-   security review of the socket.
+   implemented and the pause list works on macOS. What is left is hardware
+   checks (lists below).
+
+### To close M2 (issue #2)
+
+- [ ] App matrix run on CachyOS (item 1), including mpv/VLC with
+  `hwdec=nvdec`, and calibrate the thresholds from it.
+- [ ] Close issue #2 and tag `v0.0.2`.
+
+### To close M3 (issue #3)
+
+- [ ] Try the GUI on the CachyOS desktop (checklist in section 3).
+- [ ] Run the M4 Air with FAH folding on the 1-thread CPU budget and watch
+  the temperature (item 0).
+- [ ] macOS pause list on AC: folding resumes 2 minutes after the matching
+  app quits. Only checked on battery so far.
+- [ ] Start the unit without the `ecofold` group: it must start, log
+  `socket group not found` and leave the socket `0600`.
+- [ ] Security review of the socket (`security-audit` skill, `standard`
+  profile).
+
+Not needed to close M3: decide where the config is persisted (eco watts and
+the pause list are lost on restart), harden the systemd unit, and calibrate
+the macOS per-app GPU time (`GPUApps`) under a real Metal game or render.
 
 ## Road to v0.1.0
 
