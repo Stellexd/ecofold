@@ -15,3 +15,7 @@ On macOS, AC presence is derived from `AppleSmartBattery.ExternalConnected` when
 ## Known limitations
 
 - The battery-less desktop fixture used for testing is synthetic; a real Mac Studio dump is not yet available.
+
+## License
+
+EcoFold is free software released under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only). You may redistribute and modify it under those terms; derivative works must be distributed under the same license.

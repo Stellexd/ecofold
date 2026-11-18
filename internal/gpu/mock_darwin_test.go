@@ -25,6 +25,9 @@ func TestMockProviderContract(t *testing.T) {
 	if tel.SupportsPowerLimit {
 		t.Fatalf("mock device should report SupportsPowerLimit=false")
 	}
+	if !tel.Simulated {
+		t.Fatalf("mock device should report Simulated=true")
+	}
 	if tel.MinPowerLimitW != 123 {
 		t.Fatalf("MinPowerLimitW = %d, want 123", tel.MinPowerLimitW)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -47,6 +48,9 @@ var (
 	// ErrOnBattery means folding was not resumed because the evaluator's
 	// current decision is a battery pause.
 	ErrOnBattery = errors.New("daemon: on battery")
+	// ErrThermal means folding was not resumed because the evaluator's
+	// current decision is a thermal pause.
+	ErrThermal = errors.New("daemon: thermal pressure")
 	// ErrFAHUnavailable means Folding@home did not confirm the action. The
 	// loop retries it every tick.
 	ErrFAHUnavailable = errors.New("daemon: folding@home did not confirm the action")
@@ -83,7 +87,10 @@ type Status struct {
 	// PausedByUs reports that the current FAH pause is the daemon's, so the
 	// daemon resumes it; false while folding and for a pause the user made.
 	PausedByUs bool `json:"paused_by_us"`
-	Degraded   bool `json:"degraded"`
+	// StartupHold reports that PausedByUs is a pause inherited from a
+	// previous run that the startup hold still keeps (StartupHoldTicks).
+	StartupHold bool `json:"startup_hold"`
+	Degraded    bool `json:"degraded"`
 
 	// PowerCapable is false when the device has no power limit control;
 	// PowerEnabled is false when the daemon is not applying it (not capable,
@@ -104,21 +111,38 @@ type Status struct {
 
 	// GameSessions are the live game sessions (Linux detection layer 2).
 	GameSessions []string `json:"game_sessions"`
+	// PauseListSupported is false when the collector cannot match processes
+	// (macOS): SetPauseProcesses then fails with ErrUnsupported.
+	PauseListSupported bool `json:"pause_list_supported"`
 	// PauseProcesses is the pause list; PauseMatches are the running
 	// processes that match it.
 	PauseProcesses []string `json:"pause_processes"`
 	PauseMatches   []string `json:"pause_matches"`
 
+	// FoldingSeconds is the time Folding@home was seen running a work unit
+	// since the daemon started, and ProjectsContributed the projects of
+	// those work units, in the order they were first seen. Both are kept in
+	// memory only and start again with the daemon.
+	FoldingSeconds      int64 `json:"folding_seconds"`
+	ProjectsContributed []int `json:"projects_contributed"`
+
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// GPUStatus is the last GPU telemetry read.
+// GPUStatus is the last GPU telemetry read. With a simulated provider (macOS,
+// the Linux stub) the watts, temperature and VRAM are zero and Name comes
+// from the collector: a mock's numbers are never published.
 type GPUStatus struct {
 	Name         string `json:"name"`
 	TempC        int    `json:"temp_c"`
 	PowerUsageW  int    `json:"power_usage_w"`
 	UsedVRAMMiB  int    `json:"used_vram_mib"`
 	TotalVRAMMiB int    `json:"total_vram_mib"`
+	// UtilPct and InUseMemMiB are the device-wide metrics of the last
+	// snapshot (macOS ioreg). They stay zero on Linux, where the collector
+	// reports per-process data instead.
+	UtilPct     int `json:"util_pct"`
+	InUseMemMiB int `json:"in_use_mem_mib"`
 }
 
 // BatteryStatus is the battery state of the last snapshot.
@@ -129,12 +153,17 @@ type BatteryStatus struct {
 	Pct      int  `json:"pct"`
 }
 
-// FAHStatus is what the daemon last learned about Folding@home. The daemon
-// talks to FAH only when it pauses or resumes, so a pause the user makes in
-// FAH itself shows up here at the next such action, not immediately.
+// FAHStatus is what the daemon last learned about Folding@home. The loop
+// reads the status again every fahRefreshTicks ticks, so a change made in FAH
+// itself shows up here within that time.
 type FAHStatus struct {
 	Paused bool `json:"paused"`
-	// Reachable is false when the last call failed.
+	// State is one of the fah.State* values; "unknown" until FAH answers.
+	State string `json:"state"`
+	// ActiveProjectID is the project of the running work unit, or 0.
+	ActiveProjectID int `json:"active_project_id"`
+	// Reachable is false when the last call failed; the fields above then
+	// hold the last known values.
 	Reachable bool `json:"reachable"`
 	// ObservedAt is the time of that call; zero means FAH was never asked.
 	ObservedAt time.Time `json:"observed_at"`
@@ -144,6 +173,7 @@ func (s Status) clone() Status {
 	s.GameSessions = append([]string{}, s.GameSessions...)
 	s.PauseProcesses = append([]string{}, s.PauseProcesses...)
 	s.PauseMatches = append([]string{}, s.PauseMatches...)
+	s.ProjectsContributed = append([]int{}, s.ProjectsContributed...)
 	return s
 }
 
@@ -153,41 +183,51 @@ func (d *Daemon) Status() Status {
 	if st := d.status.Load(); st != nil {
 		return st.clone()
 	}
-	return Status{Mode: ModeStarting, ManualOverride: OverrideNone}.clone()
+	return Status{Mode: ModeStarting, ManualOverride: OverrideNone, FAH: FAHStatus{State: fah.StateUnknown}}.clone()
 }
 
 // publish stores a snapshot of the current state. Loop goroutine only.
 func (d *Daemon) publish() Status {
 	if tel, err := d.gpu.GetTelemetry(); err == nil {
 		d.powerLimitW = tel.PowerLimitW
-		d.gpuStatus = GPUStatus{
-			Name:         tel.Name,
-			TempC:        tel.TempC,
-			PowerUsageW:  tel.PowerUsageW,
-			UsedVRAMMiB:  tel.UsedVRAMMiB,
-			TotalVRAMMiB: tel.TotalVRAMMiB,
+		if tel.Simulated {
+			// A mock's watts, temperature and VRAM are not this machine's.
+			d.gpuStatus = GPUStatus{Name: d.gpuName}
+		} else {
+			d.gpuStatus = GPUStatus{
+				Name:         tel.Name,
+				TempC:        tel.TempC,
+				PowerUsageW:  tel.PowerUsageW,
+				UsedVRAMMiB:  tel.UsedVRAMMiB,
+				TotalVRAMMiB: tel.TotalVRAMMiB,
+			}
 		}
 	}
+	d.gpuStatus.UtilPct, d.gpuStatus.InUseMemMiB = d.gpuUtilPct, d.gpuInUseMemMiB
 	st := Status{
-		Mode:               d.mode,
-		ManualOverride:     d.manual,
-		PausedByUs:         d.pausedByUs,
-		Degraded:           d.degraded,
-		PowerCapable:       d.powerCapable,
-		PowerEnabled:       d.powerEnabled,
-		CapApplied:         d.capApplied,
-		PowerLimitW:        d.powerLimitW,
-		DefaultPowerLimitW: d.defaultW,
-		MinPowerLimitW:     d.minW,
-		MaxPowerLimitW:     d.maxW,
-		EcoWatts:           d.ecoWatts,
-		GPU:                d.gpuStatus,
-		Battery:            d.battery,
-		FAH:                d.fahStatus,
-		GameSessions:       d.sessions,
-		PauseProcesses:     d.pauseProcesses,
-		PauseMatches:       d.pauseMatches,
-		UpdatedAt:          time.Now(),
+		Mode:                d.mode,
+		ManualOverride:      d.manual,
+		PausedByUs:          d.pausedByUs,
+		StartupHold:         d.resumeHold > 0 && d.pausedByUs,
+		Degraded:            d.degraded,
+		PowerCapable:        d.powerCapable,
+		PowerEnabled:        d.powerEnabled,
+		CapApplied:          d.capApplied,
+		PowerLimitW:         d.powerLimitW,
+		DefaultPowerLimitW:  d.defaultW,
+		MinPowerLimitW:      d.minW,
+		MaxPowerLimitW:      d.maxW,
+		EcoWatts:            d.ecoWatts,
+		GPU:                 d.gpuStatus,
+		Battery:             d.battery,
+		FAH:                 d.fahStatus,
+		GameSessions:        d.sessions,
+		PauseListSupported:  d.pauseListSupported(),
+		PauseProcesses:      d.pauseProcesses,
+		PauseMatches:        d.pauseMatches,
+		FoldingSeconds:      int64(d.foldingTime / time.Second),
+		ProjectsContributed: d.projects,
+		UpdatedAt:           time.Now(),
 	}.clone()
 	d.status.Store(&st)
 	return st.clone()
@@ -237,9 +277,9 @@ func (d *Daemon) ForcePause(ctx context.Context) (Status, error) {
 // (CH-10, invariant I1).
 //
 // Folding is not resumed, and an error is returned, when the evaluator's
-// current decision is a pause (ErrGameActive, ErrOnBattery) or when the eco
-// limit cannot be applied (ErrCapFailed). The override is cleared in every
-// case, so the daemon resumes its own pause as soon as conditions allow.
+// current decision is a pause (ErrGameActive, ErrOnBattery, ErrThermal) or
+// when the eco limit cannot be applied (ErrCapFailed). The override is cleared
+// in every case, so the daemon resumes its own pause as soon as conditions allow.
 func (d *Daemon) ForceResume(ctx context.Context) (Status, error) {
 	return d.do(ctx, &command{kind: cmdForceResume})
 }
@@ -396,6 +436,8 @@ func (d *Daemon) forceResume(ctx context.Context) error {
 				return fmt.Errorf("%w: folding resumes after the cooldown", ErrGameActive)
 			case detector.StatePausedBattery:
 				return fmt.Errorf("%w: folding resumes when the battery allows it", ErrOnBattery)
+			case detector.StatePausedThermal:
+				return fmt.Errorf("%w: folding resumes after the machine cools down", ErrThermal)
 			}
 		}
 	}
@@ -465,6 +507,11 @@ func (d *Daemon) capWanted() bool {
 		!(d.resumeHold > 0 && d.pausedByUs)
 }
 
+func (d *Daemon) pauseListSupported() bool {
+	_, ok := d.collector.(PauseListSetter)
+	return ok
+}
+
 func (d *Daemon) setPauseProcesses(patterns []string) error {
 	setter, ok := d.collector.(PauseListSetter)
 	if !ok {
@@ -482,16 +529,49 @@ func (d *Daemon) readFAH(ctx context.Context) (fah.Status, error) {
 	sctx, cancel := context.WithTimeout(ctx, d.cfg.StatusTimeout)
 	defer cancel()
 	st, err := d.fah.GetStatus(sctx)
-	d.observeFAH(st.Paused, err)
+	d.observeFAH(st, err)
 	return st, err
 }
 
+// refreshFAH reads the FAH status again when the last observation is
+// fahRefreshTicks ticks old. It only feeds Status: decisions read FAH
+// themselves when they need it.
+func (d *Daemon) refreshFAH(ctx context.Context) {
+	if d.fahAge++; d.fahAge < fahRefreshTicks {
+		return
+	}
+	_, _ = d.readFAH(ctx)
+}
+
 // observeFAH records the outcome of a FAH call. On failure the last known
-// paused state is kept.
-func (d *Daemon) observeFAH(paused bool, err error) {
+// state is kept.
+func (d *Daemon) observeFAH(st fah.Status, err error) {
+	d.fahAge = 0
 	d.fahStatus.ObservedAt = time.Now()
 	d.fahStatus.Reachable = err == nil
 	if err == nil {
-		d.fahStatus.Paused = paused
+		d.fahStatus.Paused = st.Paused
+		d.fahStatus.State = st.State
+		d.fahStatus.ActiveProjectID = st.ActiveProjectID
+	}
+}
+
+// accountFolding adds the time since the previous loop pass to the folding
+// total when Folding@home was last seen running a work unit, and records its
+// project. A paused, idle or unreachable FAH adds nothing. The step is
+// capped, so a stalled loop or a suspended machine is not counted as work.
+// Loop goroutine only.
+func (d *Daemon) accountFolding(now time.Time) {
+	last := d.accountedAt
+	d.accountedAt = now
+	f := d.fahStatus
+	if !f.Reachable || f.Paused || f.State != fah.StateFolding {
+		return
+	}
+	if step := now.Sub(last); !last.IsZero() && step > 0 {
+		d.foldingTime += min(step, maxAccountedTicks*d.cfg.Tick)
+	}
+	if id := f.ActiveProjectID; id > 0 && !slices.Contains(d.projects, id) && len(d.projects) < maxProjects {
+		d.projects = append(d.projects, id)
 	}
 }

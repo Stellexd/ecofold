@@ -6,10 +6,15 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-16 (M3 IPC backend on `feat/m3-ipc-socket`).
+Last updated: 2026-11-18 (M3 GUI on `feat/m3-gui`).
 
 ## Next session
 
+0. **macOS thermal incident (2026-11-18), blocks the GUI release on macOS.**
+   The M4 Air reached 106 °C while folding and EcoFold did not stop it. See
+   `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md` and the boxes under section 3
+   and "Open risks". Until it is fixed, do not leave FAH folding on the M4
+   unattended.
 1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
    while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
    with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
@@ -17,8 +22,9 @@ Last updated: 2026-11-16 (M3 IPC backend on `feat/m3-ipc-socket`).
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. M3 backend is written and verified on CachyOS (`feat/m3-ipc-socket`):
-   next the security review of the socket, then the GUI.
+3. M3 is written: the IPC backend is verified on CachyOS and the GUI is
+   implemented (`feat/m3-gui`). Next: try the GUI on both desktops
+   (checklist in section 3), then the security review of the socket.
 
 ## Road to v0.1.0
 
@@ -110,9 +116,9 @@ always stop folding.
   and the manual pause are lost when the daemon restarts (the flags apply
   again). Decide where a config file lives and who may write it before the
   GUI ships settings.
-- [ ] The `fah` block of the status is what the daemon saw the last time it
-  paused or resumed. A pause made in FAH's own UI does not show until then.
-  Add a slow periodic `GetStatus` if the GUI needs it.
+- [x] The `fah` block of the status was what the daemon saw the last time it
+  paused or resumed. The loop now reads the FAH status on its first tick and
+  every 5 ticks (10 s), so a pause made in FAH's own UI shows by itself.
 - [ ] Pause list on macOS: `set_pause_processes` and `-pause-processes` are
   refused or ignored there (`unsupported`), because `DarwinCollector` reads
   ioreg only. It needs a per-process source before it can be supported.
@@ -125,9 +131,97 @@ always stop folding.
 - [ ] Harden the unit further (`SystemCallFilter=@system-service`,
   `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
   re-check that NVML and cgo still work on CachyOS.
-- [ ] Add Wails to `go.mod`; system tray with state (Folding / Paused by game /
-  Battery) and current TDP. The GUI stays unprivileged.
-- [ ] GUI handles the daemon being down (shows "daemon not running", no crash).
+- [x] System tray with state (Folding / Paused by game / Battery) and current
+  TDP, plus a control panel. The GUI stays unprivileged. Built with Fyne in
+  pure Go instead of Wails: `cmd/ecofold-gui` and `internal/gui`.
+- [x] GUI handles the daemon being down (shows "Daemon not running" or
+  "Access denied", no crash) and reconnects by itself.
+- [ ] **Try the GUI on real desktops.** It was written on macOS. Automated
+  tests cover the controller against a real socket and the panel on Fyne's
+  software driver; the real binary was only launched on macOS for a few
+  seconds (it started, connected to a mock daemon and survived the daemon
+  stopping). Nobody has looked at the real window or tray yet.
+  - [x] CachyOS: `make build` with cgo and `go test -race ./...` pass
+    (2026-11-17, commit `19a276c`, Go 1.27.4). Run as the normal user for a
+    few seconds, the new daemon reported the real FAH state (`folding`,
+    project 18264) without pausing, and the NVML telemetry. `ecofold-gui
+    -hidden` started in the Plasma Wayland session, registered its
+    StatusNotifierItem and exited cleanly on SIGINT. Nobody looked at it:
+    the visual checks below are still open. It used about 250 MiB of RSS
+    while hidden; measure it properly against the "minimal footprint" rule.
+  - [x] CachyOS: daemon reinstalled from `19a276c` (2026-11-17). Active,
+    socket `0660` in a `0750` directory, 123 W while folding, and the status
+    carries `state`, `active_project_id` and `pause_list_supported`. The
+    control panel was seen on Plasma: green dot, "running (project #18264)",
+    the NVML usage line, the eco slider (range 123-145 W) and the pause list
+    enabled.
+  - [x] KDE Plasma (Wayland), 2026-11-17: the tray icon appears, the menu
+    works, the window's X hides it instead of quitting, and Pause Folding
+    turns the icon gray, pauses FAH and restores 145 W.
+  - [ ] KDE Plasma: the icon turns blue during a game.
+  - [ ] macOS: the menu bar icon and menu, and the control panel with the
+    power control hidden and the pause list disabled.
+  - [ ] Against the real daemon: resume (also during a game, to see the
+    `game_active` message), the eco limit applied while folding and the
+    pause list. On 2026-11-17 the eco limit was set to 130 W during a manual
+    pause: the daemon accepted it and correctly kept 145 W, so the applied
+    cap was not seen.
+- [x] **GUI showed misleading data** (seen on the real window on a MacBook Air
+  M4, 2026-11-16). Fixed 2026-11-17 in
+  `fix(gui,daemon): report real fah status and accurate macos gpu telemetry`.
+  - [x] **1. Real FAH status.** The loop reads `fah.GetStatus` on its first
+    pass and every 5 ticks; `daemon.FAHStatus` and `gui.Status.FAH` carry
+    `state` and `active_project_id`. An unreachable FAH shows
+    "Folding@home: not reachable (is the client running?)", a gray icon and
+    the headline "Folding@home Not Reachable" instead of "Folding".
+  - [x] **2. No mock GPU data on macOS.** `gpu.Telemetry.Simulated` marks the
+    mock and the Linux stub; the daemon never publishes their watts,
+    temperature or VRAM. The name (`Apple M4`), utilization and in-use memory
+    come from ioreg through `SystemSnapshot`, and the panel shows
+    "GPU utilization: X % · In-use memory: Y MiB". Checked against the real
+    daemon on the MacBook Air M4.
+  - [x] **3. Tests and checks.** `gofmt -l .`, `go vet ./...`,
+    `go test -race ./...` and `make build` pass on macOS.
+- [x] **Control panel redesign and project metadata** (2026-11-17). The GUI
+  fetches `api.foldingathome.org/project/<id>` (3 s timeout, cached by id, a
+  failure is retried after a minute and never marks the daemon offline) and
+  the "Scientific Impact & Compute Engine" card shows the cause, institution
+  and a link to the stats page. The GPU figures are a 3-column grid. The
+  BOINC engines in the selector only announce v0.2. The "Community
+  Leaderboard" opt-in is stored in the local preferences and sends nothing:
+  `ecofold-web` does not exist yet. Only seen on Fyne's software driver;
+  look at it on Plasma and macOS.
+- [x] **Header contradicted the FAH line** (seen on macOS, 2026-11-17:
+  "Folding (on battery)" in green over "paused by EcoFold"). While the mode
+  allows folding the header now follows FAH: "Resuming Folding…" for the
+  daemon's own pause, "Paused in Folding@home" for the user's, "Idle (Waiting
+  for Work Unit)" without a work unit; all gray. During the startup hold
+  (`startup_hold` in the status) it says "Starting Folding…" instead.
+- [x] **Contribution counters.** The daemon publishes `folding_seconds` and
+  `projects_contributed` for its current run (memory only), and the
+  leaderboard card shows "Session compute donated: Xh Ym · Projects: N". The
+  GUI keeps a random
+  `client_uuid` in its preferences. Still nothing is sent anywhere.
+  - [ ] Persist the totals across daemon restarts if the leaderboard needs
+    lifetime figures.
+- [ ] **macOS thermal protection: the pressure guard is not enough**
+  (2026-11-18). `DarwinCollector` reads
+  `com.apple.system.thermalpressurelevel` and pauses at 2+ as
+  `paused_thermal` (`b476b77`). Live on the M4 Air the level stayed at 0
+  while the CPU was at 106 °C, so the guard never fired. See
+  `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
+  - [ ] Limit FAH's CPU threads on macOS through the v8 `cpus` option
+    (record and restore the user's value), with values measured on the M4.
+  - [ ] Trace the pressure level under sustained FAH load to see if and when
+    it reaches 1 or 2; decide on a rule for level 1 held for minutes.
+  - [ ] Document an emergency stop that works without the daemon.
+- [ ] **Single daemon instance** (incident 2026-11-18). A second daemon whose
+  socket is taken (`ipc.ErrAlreadyRunning`) keeps running without IPC,
+  shares the pause marker and drives FAH against the first one. Make
+  `ErrAlreadyRunning` fatal at startup.
+- [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
+  with an XDG autostart entry / a LaunchAgent), and an application icon and
+  bundle for macOS.
 
 ### 4. M4 (issue #4): CI, packaging and release
 
@@ -168,6 +262,12 @@ always stop folding.
   path counts as ownership (root-only).
 - [ ] **L2-1** (accepted, see `CHAOS_REPORT_LAYER2.md`): a user process can
   pose as `reaper SteamLaunch`; it only holds a pause its own load caused.
+
+- [ ] **INC-3 The daemon does not enforce its own pause** (incident
+  2026-11-18). A daemon in `paused_manual` with `paused_by_us: true` read FAH
+  as folding and did nothing; the status kept saying it was paused.
+  `Daemon.apply` acts only on transitions. Fix without breaking CH-10: a
+  resume the user makes in FAH stays the user's.
 
 ## After v0.1.0
 

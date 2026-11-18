@@ -20,11 +20,16 @@ const DefaultBatteryRefreshTicks = 15
 // full power on battery (R4).
 var ErrBatteryVanished = errors.New("detector: battery vanished after it was seen")
 
+// thermalStaleTicks is how many consecutive failed thermal reads reuse the
+// last level read before Collect reports 0 (unknown). It bridges a glitch
+// without keeping a stale "serious" forever.
+const thermalStaleTicks = 15
+
 // DarwinCollector builds SystemSnapshot values on macOS from ioreg output.
 //
-// It reads IOAccelerator on every Collect and AppleSmartBattery every
-// DefaultBatteryRefreshTicks calls, so ioreg runs at most twice per daemon
-// tick and usually once.
+// It reads IOAccelerator and the thermal pressure level on every Collect and
+// AppleSmartBattery every DefaultBatteryRefreshTicks calls, so ioreg runs at
+// most twice per daemon tick and usually once.
 //
 // DarwinCollector is not safe for concurrent use by multiple goroutines; each
 // daemon tick creates one snapshot at a time.
@@ -35,6 +40,9 @@ var ErrBatteryVanished = errors.New("detector: battery vanished after it was see
 type DarwinCollector struct {
 	// fetch is the ioreg seam. Production uses FetchIORegContext.
 	fetch func(ctx context.Context, class string) ([]byte, error)
+	// thermal is the thermal pressure seam. Production uses
+	// FetchThermalPressureContext; nil reports 0.
+	thermal func(ctx context.Context) (int, error)
 
 	batteryEvery int
 	calls        int
@@ -42,12 +50,18 @@ type DarwinCollector struct {
 	battValid    bool
 	// seenBattery latches once any read reports HasBattery=true.
 	seenBattery bool
+
+	// thermalLevel is the last level read; thermalFails counts the failed
+	// reads since.
+	thermalLevel int
+	thermalFails int
 }
 
 // NewDarwinCollector returns a collector that runs /usr/sbin/ioreg.
 func NewDarwinCollector() *DarwinCollector {
 	return &DarwinCollector{
 		fetch:        FetchIORegContext,
+		thermal:      FetchThermalPressureContext,
 		batteryEvery: DefaultBatteryRefreshTicks,
 	}
 }
@@ -60,6 +74,9 @@ func NewDarwinCollector() *DarwinCollector {
 // evaluator. A failed battery refresh is retried on the next call. An empty
 // AppleSmartBattery result after a battery was seen returns
 // ErrBatteryVanished.
+//
+// A failed thermal read never fails Collect: the last level is reused for up
+// to thermalStaleTicks calls, then 0 (unknown) is reported.
 func (c *DarwinCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return SystemSnapshot{}, err
@@ -99,5 +116,27 @@ func (c *DarwinCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 	}
 
 	c.calls++
-	return snapshotFromMetrics(c.batt, gpu), nil
+	snap := snapshotFromMetrics(c.batt, gpu)
+	snap.ThermalLevel = c.readThermal(ctx)
+	return snap, nil
+}
+
+// readThermal returns the current thermal pressure level, degrading as
+// Collect documents.
+func (c *DarwinCollector) readThermal(ctx context.Context) int {
+	if c.thermal == nil {
+		return 0
+	}
+	level, err := c.thermal(ctx)
+	if err == nil {
+		c.thermalLevel, c.thermalFails = level, 0
+		return level
+	}
+	if c.thermalFails < thermalStaleTicks {
+		c.thermalFails++
+	}
+	if c.thermalFails >= thermalStaleTicks {
+		c.thermalLevel = 0
+	}
+	return c.thermalLevel
 }

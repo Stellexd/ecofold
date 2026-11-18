@@ -140,6 +140,8 @@ func errorCode(err error) string {
 		return ipc.CodeGameActive
 	case errors.Is(err, daemon.ErrOnBattery):
 		return ipc.CodeOnBattery
+	case errors.Is(err, daemon.ErrThermal):
+		return ipc.CodeThermal
 	case errors.Is(err, daemon.ErrFAHUnavailable):
 		return ipc.CodeFAHUnavailable
 	case errors.Is(err, daemon.ErrBusy), errors.Is(err, context.DeadlineExceeded):

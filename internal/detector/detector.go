@@ -32,7 +32,18 @@ const (
 	// StatePausedLoad indicates that folding must be paused because sustained GPU
 	// load was detected (for example, an active game).
 	StatePausedLoad OperatingState = "paused_load"
+
+	// StatePausedThermal indicates that folding must be paused because the
+	// system reports serious or critical thermal pressure (macOS). It is held
+	// for the load cooldown after the pressure drops.
+	StatePausedThermal OperatingState = "paused_thermal"
 )
+
+// ThermalPressureSerious is the lowest SystemSnapshot.ThermalLevel that pauses
+// folding. The levels are macOS's com.apple.system.thermalpressurelevel:
+// 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping. ProcessInfo reports
+// 2 as "serious" and 3 and above as "critical".
+const ThermalPressureSerious = 2
 
 // ErrPerProcessUtilUnsupported is returned by a collector when the GPU driver
 // lists graphics processes but cannot attribute utilization to any of them.
@@ -180,6 +191,10 @@ type SystemSnapshot struct {
 	// "AGXAcceleratorG16G" on Apple Silicon).
 	GPUClass string
 
+	// GPUModel is the GPU's marketing name when the platform reports one (for
+	// example, "Apple M4"); empty otherwise.
+	GPUModel string
+
 	// GPUDeviceUtilPct is the overall utilization of the GPU device (%).
 	GPUDeviceUtilPct int
 
@@ -225,6 +240,11 @@ type SystemSnapshot struct {
 	// SM samples to compute work that the FAH core starves, but a rendering
 	// app keeps its CPU busy (Blender Cycles: ~1070 %; at rest: 0-1 %).
 	ProcessCPUPct map[uint32]int
+
+	// ThermalLevel is the system thermal pressure level (macOS only; see
+	// ThermalPressureSerious). 0 means nominal or unknown: Linux always
+	// reports 0, and so does macOS when the level cannot be read.
+	ThermalLevel int
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
@@ -236,6 +256,10 @@ type Evaluator struct {
 	highLoadStreak int
 	lowLoadStreak  int
 	loadPaused     bool
+	// thermalPaused latches a thermal pause; coolStreak counts the ticks
+	// below ThermalPressureSerious since the last one at or above it.
+	thermalPaused bool
+	coolStreak    int
 	// heldSessions are the game sessions whose processes caused the current
 	// load streak or pause. While one of them is live, the cooldown waits.
 	heldSessions map[string]struct{}
@@ -301,9 +325,11 @@ func NewEvaluator(cfg Config) *Evaluator {
 //     its own utilization meets GPUMemRequiresUtilPct. Memory from one process
 //     is never combined with another process's utilization. When GPUProcesses
 //     is nil, the device-wide fields are used with the same rule.
-//  2. Low battery or battery folding disabled → StatePausedBattery.
-//  3. On battery with sufficient charge and folding allowed → StateFoldingEco.
-//  4. Any other case → StateFolding.
+//  2. Thermal pressure at or above ThermalPressureSerious →
+//     StatePausedThermal, from the first tick.
+//  3. Low battery or battery folding disabled → StatePausedBattery.
+//  4. On battery with sufficient charge and folding allowed → StateFoldingEco.
+//  5. Any other case → StateFolding.
 //
 // After a load pause, the evaluator latches the decision and keeps returning
 // StatePausedLoad until CooldownTicksRequired consecutive load-free ticks have
@@ -316,6 +342,12 @@ func NewEvaluator(cfg Config) *Evaluator {
 // pause while the load latch is active, StatePausedBattery is returned instead
 // (it has no cooldown and reflects the independent, higher-priority reason).
 //
+// A thermal pause is latched the same way: it lasts until
+// CooldownTicksRequired consecutive ticks below ThermalPressureSerious have
+// elapsed, so a machine that cools a few degrees does not resume and heat up
+// again within seconds. While the load latch is active but no load is seen,
+// the thermal reason is reported before the battery one.
+//
 // Evaluate is safe for concurrent use by multiple goroutines.
 func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	e.mu.Lock()
@@ -323,6 +355,7 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 
 	batteryPause := s.HasBattery && !s.OnAC && (!e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct)
 	isHighLoad, sessions := e.isHighLoad(s)
+	thermalPause := e.thermalHeld(s.ThermalLevel)
 
 	switch {
 	case isHighLoad:
@@ -357,12 +390,18 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 		// A current high-load tick keeps reporting the load reason even if the
 		// battery is also low. If the load is gone but the battery still demands
 		// a pause, report that independent reason instead.
+		if !isHighLoad && thermalPause {
+			return StatePausedThermal
+		}
 		if !isHighLoad && batteryPause {
 			return StatePausedBattery
 		}
 		return StatePausedLoad
 	}
 
+	if thermalPause {
+		return StatePausedThermal
+	}
 	if batteryPause {
 		return StatePausedBattery
 	}
@@ -371,6 +410,23 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	}
 
 	return StateFolding
+}
+
+// thermalHeld updates the thermal latch with this tick's level and reports
+// whether folding must stay paused for it. It must be called with e.mu held.
+func (e *Evaluator) thermalHeld(level int) bool {
+	if level >= ThermalPressureSerious {
+		e.thermalPaused, e.coolStreak = true, 0
+		return true
+	}
+	if !e.thermalPaused {
+		return false
+	}
+	e.coolStreak++
+	if e.coolStreak >= e.cfg.CooldownTicksRequired {
+		e.thermalPaused, e.coolStreak = false, 0
+	}
+	return e.thermalPaused
 }
 
 // isHighLoad reports whether the snapshot shows sustained-capable game load and

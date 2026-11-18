@@ -301,6 +301,7 @@ var (
 	snapLoad       = detector.SystemSnapshot{OnAC: true, GPUDeviceUtilPct: 90}
 	snapLowBattery = detector.SystemSnapshot{HasBattery: true, OnAC: false, BatteryPct: 10}
 	snapBatteryOK  = detector.SystemSnapshot{HasBattery: true, OnAC: false, BatteryPct: 80}
+	snapHot        = detector.SystemSnapshot{HasBattery: true, OnAC: true, BatteryPct: 80, ThermalLevel: 2}
 )
 
 var (

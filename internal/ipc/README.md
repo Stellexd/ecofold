@@ -1,7 +1,8 @@
 # `internal/ipc`: daemon control socket
 
 The channel between `ecofold-daemon` (root on Linux) and its unprivileged
-clients, today the GUI. One JSON message per line over a Unix domain socket.
+clients, today the GUI (`cmd/ecofold-gui`, through the controller in
+`internal/gui`). One JSON message per line over a Unix domain socket.
 
 The package imports only the standard library and `golang.org/x/sys`. It does
 not import `internal/daemon`: the daemon plugs in through `ipc.Handler`, and
@@ -130,9 +131,10 @@ Notes:
   it is the user's consent; it is the one exception to "the daemon never
   resumes a user pause" (CH-10, invariant I1).
 - `force_resume` does not resume while the detector's current decision is a
-  pause (`game_active`, `on_battery`), or if the eco limit cannot be applied
-  (`cap_failed`). The manual pause is cleared in all three cases, so the
-  daemon resumes its own pause automatically once conditions allow.
+  pause (`game_active`, `on_battery`, `thermal_pressure`), or if the eco
+  limit cannot be applied (`cap_failed`). The manual pause is cleared in
+  every case, so the daemon resumes its own pause automatically once
+  conditions allow.
 - In Degraded mode, or without permission to set power limits, `force_resume`
   resumes at the default limit. The status shows `degraded` or
   `power_enabled: false`.
@@ -155,6 +157,7 @@ Notes:
 | `cap_failed` | The driver rejected the power limit. The previous value stays. |
 | `game_active` | Not resumed: the detector sees a game or GPU load. |
 | `on_battery` | Not resumed: battery guard. |
+| `thermal_pressure` | Not resumed: macOS thermal guard. |
 | `fah_unavailable` | Folding@home did not confirm the pause or resume. |
 | `busy` | The control loop did not take the command within 3 s. A command the loop never took has no effect. |
 | `stopping` | The daemon is shutting down. |
@@ -171,6 +174,7 @@ again.
   "mode": "folding",
   "manual_override": "none",
   "paused_by_us": false,
+  "startup_hold": false,
   "degraded": false,
   "power_capable": true,
   "power_enabled": true,
@@ -180,27 +184,53 @@ again.
   "min_power_limit_w": 100,
   "max_power_limit_w": 145,
   "eco_watts": 123,
-  "gpu": {"name": "...", "temp_c": 61, "power_usage_w": 118, "used_vram_mib": 812, "total_vram_mib": 8192},
+  "gpu": {"name": "...", "temp_c": 61, "power_usage_w": 118, "used_vram_mib": 812, "total_vram_mib": 8192,
+          "util_pct": 0, "in_use_mem_mib": 0},
   "battery": {"present": false, "on_ac": true, "charging": false, "pct": 100},
-  "fah": {"paused": false, "reachable": true, "observed_at": "2026-11-16T02:13:01-03:00"},
+  "fah": {"paused": false, "state": "folding", "active_project_id": 18264, "reachable": true,
+          "observed_at": "2026-11-16T02:13:01-03:00"},
   "game_sessions": [],
+  "pause_list_supported": true,
   "pause_processes": ["blender"],
   "pause_matches": [],
+  "folding_seconds": 5025,
+  "projects_contributed": [18264],
   "updated_at": "2026-11-16T02:13:01-03:00"
 }
 ```
 
 - `mode`: `starting`, `folding`, `folding_eco`, `paused_load`,
-  `paused_battery`, `paused_manual` or `degraded`.
+  `paused_battery`, `paused_thermal`, `paused_manual` or `degraded`.
+  `paused_thermal` is macOS's thermal guard: the system reported serious or
+  critical thermal pressure, and the pause lasts the load cooldown (two
+  minutes) after it drops.
 - `manual_override`: `none` or `pause`.
 - `paused_by_us`: the current FAH pause is the daemon's, so the daemon will
   resume it.
+- `startup_hold`: `paused_by_us` is a pause inherited from the previous run
+  that the startup hold still keeps (one cooldown after the daemon starts).
+  A client can say "starting" instead of "resuming".
+- `pause_list_supported`: false where `set_pause_processes` answers
+  `unsupported` (macOS), so a client can disable the control up front.
 - The status is a snapshot taken at `updated_at`, at the end of the last tick
   or command. Telemetry and game sessions are the last known values.
 - `fah` is what the daemon learned the last time it talked to FAH
-  (`observed_at`; the zero time means never). The daemon only talks to FAH
-  when it pauses or resumes, so a pause made in FAH's own UI does not show
-  here until then.
+  (`observed_at`; the zero time means never). The daemon reads the FAH status
+  on its first tick and again every 5 ticks (10 s), so a change made in FAH's
+  own UI shows here within that time. `state` is `folding`, `paused`, `idle`
+  (not paused, no work unit running) or `unknown`; `active_project_id` is 0
+  when no work unit is running. With `reachable` false the other fields are
+  the last known values.
+- `folding_seconds` is the time FAH was seen running a work unit (reachable,
+  not paused, `state` `folding`) since the daemon started, and
+  `projects_contributed` the projects of those work units in the order they
+  were first seen (at most 256). Both live in memory and start again with
+  the daemon. A loop pass adds at most 3 ticks, so a suspended machine is not
+  counted.
+- `gpu`: with a simulated provider (macOS, the Linux stub) `temp_c`,
+  `power_usage_w` and the VRAM fields are 0, and `name` comes from the
+  collector (`Apple M4`). `util_pct` and `in_use_mem_mib` are the device-wide
+  ioreg metrics on macOS and 0 on Linux.
 
 ## Limits
 

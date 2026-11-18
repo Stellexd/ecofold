@@ -2,7 +2,7 @@
 
 - [ ] **Milestone 1 (v0.0.1):** GPU Provider Interface (NVML + Mock) & FAH Controller.
 - [ ] **Milestone 2 (v0.0.2):** Hybrid Game Detector (VRAM threshold + Proton/Wine watcher) & Cooldown hysteresis.
-- [ ] **Milestone 3 (v0.0.3):** Unix Socket IPC & Wails System Tray GUI.
+- [ ] **Milestone 3 (v0.0.3):** Unix Socket IPC & System Tray GUI. Both are implemented; the GUI is pure Go with Fyne instead of Wails (no frontend, no Node.js). Open before closing it: the GUI on a real Linux desktop and the socket's security review (`PENDING.md`).
 - [ ] **Milestone 4 (v0.1.0):** macOS Apple Silicon (.dmg) & Arch Linux (AUR) packaging + Public Release.
 
 ## Immediate Plan (in order of impact)

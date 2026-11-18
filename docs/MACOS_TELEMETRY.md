@@ -15,6 +15,28 @@ The collector uses macOS system utilities and the Python 3 standard library; it 
 - The profile reads `hw.model` and `machdep.cpu.brand_string` with `sysctl`; it obtains the macOS version through Python's `platform.mac_ver()`.
 - The collector does not call `nvidia-smi` or `powermetrics`, and does not invoke `sudo`.
 
+The Go daemon's `DarwinCollector` reads the same `ioreg` classes, plus the thermal pressure level (see "Thermal guard").
+
+## Thermal guard
+
+On a fanless MacBook Air M4, running the Folding@home client took the CPU to 105 °C and the GPU to 87 °C. The GPU-utilization and battery rules did not catch it: FAH's own load is not a game.
+
+macOS publishes its thermal pressure on the notify(3) key `com.apple.system.thermalpressurelevel`, readable without root through `/usr/bin/notifyutil -g com.apple.system.thermalpressurelevel` (output: `com.apple.system.thermalpressurelevel 0`). `DarwinCollector` reads it on every tick, with a 1 s timeout and a 4 KiB output cap, into `SystemSnapshot.ThermalLevel`.
+
+| Level | `OSThermalPressureLevel` | `ProcessInfo.ThermalState` | EcoFold |
+|---|---|---|---|
+| 0 | nominal | nominal | folds |
+| 1 | moderate | fair | folds |
+| 2 | heavy | serious | pauses (`paused_thermal`) |
+| 3 | trapping | critical | pauses |
+| 4 | sleeping | critical | pauses |
+
+A level of 2 or more pauses folding on that tick. The pause lasts until the level has stayed below 2 for the load cooldown (60 ticks, two minutes), so the Mac is not heated again as soon as it drops a few degrees. A failed read does not fail the tick: the last level is kept for 15 ticks (30 s), then 0 (unknown) is assumed. `force_resume` answers `thermal_pressure` while the pause lasts.
+
+The level is the system's own judgement and has no temperatures behind it that EcoFold can read.
+
+**Measured limitation (2026-11-18):** on the MacBook Air M4, the FAH CPU core (`FahCore_a9`, 4 threads, ~400 % CPU) took the CPU to 105–106 °C within 5–10 s, and the level stayed at `0` (`com.apple.system.thermalstatus` also `0`, `pmset -g therm` recorded no warning). The pressure level follows the system's sustained thermal state, not a die spike, so this guard cannot keep the CPU below 100 °C. It is a backstop only. See `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
+
 ## Collector and SQLite database
 
 Run from the repository root:
@@ -122,7 +144,7 @@ In that charging snapshot, `net_battery_flow_mw` was `+23,537 mW`, wall input wa
 
 ## Limitations
 
-- **Battery temperature is unavailable without changing the privilege model.** The M4's `AppleSmartBattery` node does not expose `Temperature`; `DeadBatteryBootData.GeneralPayload.AverageBattSkinTemp` and `AverageBattVirtualTemp` are always `0` in the observed captures. Unprivileged `pmset -g therm` reports historical thermal events rather than live sensors and provides no readings on a healthy device. `powermetrics` requires root, while the GUI must run unprivileged. The collector therefore stores `batt_temp_c` as SQL `NULL`; temperature must not be used for macOS detection.
+- **Battery temperature is unavailable without changing the privilege model.** The M4's `AppleSmartBattery` node does not expose `Temperature`; `DeadBatteryBootData.GeneralPayload.AverageBattSkinTemp` and `AverageBattVirtualTemp` are always `0` in the observed captures. Unprivileged `pmset -g therm` reports historical thermal events rather than live sensors and provides no readings on a healthy device. `powermetrics` requires root, while the GUI must run unprivileged. The collector therefore stores `batt_temp_c` as SQL `NULL`; temperature must not be used for macOS detection. The thermal guard uses the system's thermal pressure level instead.
 - **`TimeRemaining` uses a sentinel.** `65535` (`0xFFFF`) means unknown and is stored as `NULL`; zero is also left `NULL`. A discharge capture reported 219 minutes, while charging reported `65535`.
 - **Apple GPU telemetry is partial.** `AGXAcceleratorG16G` exposes `PerformanceStatistics`, including `Device Utilization %`, `Renderer Utilization %`, `Tiler Utilization %`, `In use system memory`, and `Alloc system memory`. The collector stores the in-use system-memory value (converted from bytes to MiB), not the allocation value. The measurements do not expose GPU temperature, power, or total VRAM. Idle utilization was already about 24%, so absolute GPU-utilization thresholds risk false positives; use a baseline/delta or combine GPU data with process information.
 - **There is no Apple Silicon TDP control through this provider.** The SoC firmware manages the GPU's power behavior. On macOS, `MockProvider` reports `SupportsPowerLimit = false`; GPU power limiting is unsupported.
@@ -146,6 +168,7 @@ In that charging snapshot, `net_battery_flow_mw` was `+23,537 mW`, wall input wa
 | `IOClass` | `IOAccelerator` | GPU node class; `AGXAcceleratorG16G` on measured M4. |
 | `PerformanceStatistics.* Utilization %` | `IOAccelerator` → `PerformanceStatistics` | Device, renderer, and tiler utilization percentages. |
 | `In use system memory` | `IOAccelerator` → `PerformanceStatistics` | GPU in-use system memory in bytes; collector stores MiB. |
+| `com.apple.system.thermalpressurelevel` | `notifyutil -g` | Thermal pressure 0–4; 2 or more pauses folding. |
 | `Alloc system memory` | `IOAccelerator` → `PerformanceStatistics` | GPU-allocated system memory in bytes; exposed by IOKit but not stored by the collector. |
 
 ## Repeat the measurements

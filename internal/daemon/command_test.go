@@ -219,6 +219,7 @@ func TestForceResumeRejectedWhilePaused(t *testing.T) {
 	}{
 		{"juego activo", snapLoad, sustainTicks, ErrGameActive, ModePausedLoad},
 		{"batería baja", snapLowBattery, 1, ErrOnBattery, ModePausedBattery},
+		{"presión térmica", snapHot, 1, ErrThermal, ModePausedThermal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -481,8 +482,8 @@ func TestSetPauseProcesses(t *testing.T) {
 		h := newHarness(t, true)
 		h.start(t)
 		st, err := h.run(&command{kind: cmdSetPauseProcesses, patterns: []string{"blender"}})
-		if !errors.Is(err, ErrUnsupported) || len(st.PauseProcesses) != 0 {
-			t.Fatalf("err = %v, lista = %v", err, st.PauseProcesses)
+		if !errors.Is(err, ErrUnsupported) || len(st.PauseProcesses) != 0 || st.PauseListSupported {
+			t.Fatalf("err = %v, status = %+v", err, st)
 		}
 	})
 
@@ -495,7 +496,7 @@ func TestSetPauseProcesses(t *testing.T) {
 		if got, _ := col.get(); strings.Join(got, "|") != "resolve" {
 			t.Fatalf("la lista inicial no llegó al collector: %v", got)
 		}
-		if st := h.d.Status(); strings.Join(st.PauseProcesses, "|") != "resolve" {
+		if st := h.d.Status(); strings.Join(st.PauseProcesses, "|") != "resolve" || !st.PauseListSupported {
 			t.Fatalf("status inicial = %v", st.PauseProcesses)
 		}
 
