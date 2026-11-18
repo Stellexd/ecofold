@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log/slog"
 	"os"
@@ -22,6 +23,9 @@ import (
 const (
 	minTick = time.Second
 	maxTick = 5 * time.Second
+
+	// pauseFAHTimeout bounds -pause-fah, including FAH's confirmation.
+	pauseFAHTimeout = 3 * time.Second
 )
 
 func main() {
@@ -42,6 +46,7 @@ func run() int {
 		tick        = flag.Duration("tick", def.Tick, "control loop period (1s-5s)")
 		runtimeDir  = flag.String("runtime-dir", defaultRuntimeDir(), "directory for the pause-ownership marker")
 		restoreOnly = flag.Bool("restore-power-limit", false, "restore the default GPU power limit and exit (for systemd ExecStopPost)")
+		pauseOnly   = flag.Bool("pause-fah", false, "pause Folding@home and exit (emergency stop; works without a running daemon)")
 		verbose     = flag.Bool("debug", false, "enable debug logging")
 		pauseList   = flag.String("pause-processes", "", "comma-separated process names that stop folding while they run, e.g. \"blender,obs\" (Linux; trailing * is a prefix match)")
 		socketPath  = flag.String("socket-path", defSocket, "Unix socket for the GUI; empty disables IPC")
@@ -57,6 +62,14 @@ func run() int {
 
 	if *restoreOnly {
 		return restorePowerLimit(logger)
+	}
+	if *pauseOnly {
+		c, err := fah.NewClientV8(*fahEndpoint)
+		if err != nil {
+			logger.Error("invalid -fah-endpoint", "err", err)
+			return 2
+		}
+		return pauseFAH(logger, c)
 	}
 
 	if *tick < minTick || *tick > maxTick {
@@ -121,10 +134,32 @@ func run() int {
 	defer stop()
 
 	if err := serve(ctx, logger, d, *socketPath, *socketGroup); err != nil {
+		if errors.Is(err, ipc.ErrAlreadyRunning) {
+			// Run never started, so nothing else was touched.
+			_ = ctrl.Close()
+			logger.Error("refusing to start a second daemon", "socket", *socketPath, "err", err)
+			return 1
+		}
 		logger.Error("daemon stopped with errors", "err", err)
 		return 1
 	}
 	logger.Info("daemon stopped")
+	return 0
+}
+
+// pauseFAH is the emergency stop: it pauses Folding@home within
+// pauseFAHTimeout and closes ctrl. It opens no socket, starts no loop and
+// never touches the GPU, so it works whether or not a daemon is running. A
+// running daemon sees the pause as the user's and does not resume it (CH-10).
+func pauseFAH(logger *slog.Logger, ctrl fah.Controller) int {
+	defer func() { _ = ctrl.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), pauseFAHTimeout)
+	defer cancel()
+	if err := ctrl.Pause(ctx); err != nil {
+		logger.Error("could not pause Folding@home", "err", err)
+		return 1
+	}
+	logger.Info("Folding@home paused")
 	return 0
 }
 
