@@ -219,6 +219,7 @@ func TestForceResumeRejectedWhilePaused(t *testing.T) {
 	}{
 		{"juego activo", snapLoad, sustainTicks, ErrGameActive, ModePausedLoad},
 		{"batería baja", snapLowBattery, 1, ErrOnBattery, ModePausedBattery},
+		{"presión térmica", snapHot, 1, ErrThermal, ModePausedThermal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

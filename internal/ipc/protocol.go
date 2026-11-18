@@ -46,6 +46,7 @@ const (
 	CodeCapFailed      = "cap_failed"
 	CodeGameActive     = "game_active"
 	CodeOnBattery      = "on_battery"
+	CodeThermal        = "thermal_pressure"
 	CodeFAHUnavailable = "fah_unavailable"
 	CodeBusy           = "busy"
 	CodeStopping       = "stopping"

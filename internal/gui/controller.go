@@ -334,6 +334,8 @@ func describeRemote(e *ipc.RemoteError) string {
 		return "Not resumed: a game or GPU load is active. Folding resumes after the cooldown."
 	case ipc.CodeOnBattery:
 		return "Not resumed: on battery. Folding resumes when the battery allows it."
+	case ipc.CodeThermal:
+		return "Not resumed: the Mac is under thermal pressure. Folding resumes after it cools down."
 	case ipc.CodeCapFailed:
 		return "The GPU rejected the power limit, so nothing was changed."
 	case ipc.CodeFAHUnavailable:

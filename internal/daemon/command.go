@@ -48,6 +48,9 @@ var (
 	// ErrOnBattery means folding was not resumed because the evaluator's
 	// current decision is a battery pause.
 	ErrOnBattery = errors.New("daemon: on battery")
+	// ErrThermal means folding was not resumed because the evaluator's
+	// current decision is a thermal pause.
+	ErrThermal = errors.New("daemon: thermal pressure")
 	// ErrFAHUnavailable means Folding@home did not confirm the action. The
 	// loop retries it every tick.
 	ErrFAHUnavailable = errors.New("daemon: folding@home did not confirm the action")
@@ -270,9 +273,9 @@ func (d *Daemon) ForcePause(ctx context.Context) (Status, error) {
 // (CH-10, invariant I1).
 //
 // Folding is not resumed, and an error is returned, when the evaluator's
-// current decision is a pause (ErrGameActive, ErrOnBattery) or when the eco
-// limit cannot be applied (ErrCapFailed). The override is cleared in every
-// case, so the daemon resumes its own pause as soon as conditions allow.
+// current decision is a pause (ErrGameActive, ErrOnBattery, ErrThermal) or
+// when the eco limit cannot be applied (ErrCapFailed). The override is cleared
+// in every case, so the daemon resumes its own pause as soon as conditions allow.
 func (d *Daemon) ForceResume(ctx context.Context) (Status, error) {
 	return d.do(ctx, &command{kind: cmdForceResume})
 }
@@ -429,6 +432,8 @@ func (d *Daemon) forceResume(ctx context.Context) error {
 				return fmt.Errorf("%w: folding resumes after the cooldown", ErrGameActive)
 			case detector.StatePausedBattery:
 				return fmt.Errorf("%w: folding resumes when the battery allows it", ErrOnBattery)
+			case detector.StatePausedThermal:
+				return fmt.Errorf("%w: folding resumes after the machine cools down", ErrThermal)
 			}
 		}
 	}

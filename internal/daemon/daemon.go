@@ -44,6 +44,7 @@ const (
 	ModeFoldingEco    Mode = Mode(detector.StateFoldingEco)
 	ModePausedLoad    Mode = Mode(detector.StatePausedLoad)
 	ModePausedBattery Mode = Mode(detector.StatePausedBattery)
+	ModePausedThermal Mode = Mode(detector.StatePausedThermal)
 	// ModeDegraded means game detection is unavailable (per-process GPU
 	// utilization unsupported): the default power limit is kept and FAH is
 	// left as it is.
@@ -629,5 +630,5 @@ func (d *Daemon) failSafe(loopHung bool) error {
 }
 
 func isPause(s detector.OperatingState) bool {
-	return s == detector.StatePausedLoad || s == detector.StatePausedBattery
+	return s == detector.StatePausedLoad || s == detector.StatePausedBattery || s == detector.StatePausedThermal
 }
