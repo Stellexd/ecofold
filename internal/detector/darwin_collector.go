@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 )
 
 // DefaultBatteryRefreshTicks is how many Collect calls reuse a cached
@@ -25,11 +26,17 @@ var ErrBatteryVanished = errors.New("detector: battery vanished after it was see
 // without keeping a stale "serious" forever.
 const thermalStaleTicks = 15
 
+// hardwareAttempts is how many Collect calls try to read the hardware model
+// before settling for the fallback (unknown model, runtime.NumCPU cores).
+const hardwareAttempts = 3
+
 // DarwinCollector builds SystemSnapshot values on macOS from ioreg output.
 //
 // It reads IOAccelerator and the thermal pressure level on every Collect and
 // AppleSmartBattery every DefaultBatteryRefreshTicks calls, so ioreg runs at
-// most twice per daemon tick and usually once.
+// most twice per daemon tick and usually once. The hardware model is read
+// with sysctl once (up to hardwareAttempts tries) and classifies the Mac
+// (MacProfile, RecommendedCPUs).
 //
 // DarwinCollector is not safe for concurrent use by multiple goroutines; each
 // daemon tick creates one snapshot at a time.
@@ -43,6 +50,9 @@ type DarwinCollector struct {
 	// thermal is the thermal pressure seam. Production uses
 	// FetchThermalPressureContext; nil reports 0.
 	thermal func(ctx context.Context) (int, error)
+	// hardware is the hardware model seam. Production uses
+	// FetchHardwareInfoContext; nil means unknown.
+	hardware func(ctx context.Context) (HardwareInfo, error)
 
 	batteryEvery int
 	calls        int
@@ -55,6 +65,12 @@ type DarwinCollector struct {
 	// reads since.
 	thermalLevel int
 	thermalFails int
+
+	// hw is the hardware model once read; hwFails counts failed reads, up to
+	// hardwareAttempts.
+	hw      HardwareInfo
+	hwKnown bool
+	hwFails int
 }
 
 // NewDarwinCollector returns a collector that runs /usr/sbin/ioreg.
@@ -62,6 +78,7 @@ func NewDarwinCollector() *DarwinCollector {
 	return &DarwinCollector{
 		fetch:        FetchIORegContext,
 		thermal:      FetchThermalPressureContext,
+		hardware:     FetchHardwareInfoContext,
 		batteryEvery: DefaultBatteryRefreshTicks,
 	}
 }
@@ -118,7 +135,28 @@ func (c *DarwinCollector) Collect(ctx context.Context) (SystemSnapshot, error) {
 	c.calls++
 	snap := snapshotFromMetrics(c.batt, gpu)
 	snap.ThermalLevel = c.readThermal(ctx)
+	hw := c.readHardware(ctx)
+	snap.MacProfile = ClassifyMacProfile(hw.Model, snap.HasBattery)
+	snap.RecommendedCPUs = RecommendedCPUs(snap.MacProfile, hw, snap.OnAC, snap.ThermalLevel)
 	return snap, nil
+}
+
+// readHardware returns the hardware model, reading it with sysctl until it
+// succeeds or hardwareAttempts calls have failed. Until then, and for good
+// after that, the model is unknown and the core count is runtime.NumCPU
+// (physical cores on Apple Silicon): a laptop then classifies as fanless.
+func (c *DarwinCollector) readHardware(ctx context.Context) HardwareInfo {
+	if !c.hwKnown && c.hardware != nil && c.hwFails < hardwareAttempts {
+		if hw, err := c.hardware(ctx); err == nil {
+			c.hw, c.hwKnown = hw, true
+		} else {
+			c.hwFails++
+		}
+	}
+	if c.hwKnown {
+		return c.hw
+	}
+	return HardwareInfo{PhysicalCPUs: runtime.NumCPU()}
 }
 
 // readThermal returns the current thermal pressure level, degrading as

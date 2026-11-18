@@ -195,6 +195,10 @@ type Daemon struct {
 	sessions       []string
 	pauseMatches   []string
 
+	// macProfile and recommendedCPUs come from the last snapshot (macOS).
+	macProfile      detector.MacThermalProfile
+	recommendedCPUs int
+
 	// Contribution of this run, for Status. See accountFolding.
 	foldingTime time.Duration
 	projects    []int
@@ -440,6 +444,7 @@ func (d *Daemon) tick(ctx context.Context) {
 		d.gpuName = snap.GPUClass
 	}
 	d.gpuUtilPct, d.gpuInUseMemMiB = snap.GPUDeviceUtilPct, snap.GPUInUseMemMiB
+	d.macProfile, d.recommendedCPUs = snap.MacProfile, snap.RecommendedCPUs
 
 	d.apply(ctx, d.eval.Evaluate(snap))
 }

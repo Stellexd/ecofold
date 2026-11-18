@@ -557,6 +557,8 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 		PauseListSupported:  true,
 		PauseProcesses:      []string{"blender"},
 		PauseMatches:        []string{"blender"},
+		MacProfile:          "fanless",
+		RecommendedCPUs:     1,
 		FoldingSeconds:      5025,
 		ProjectsContributed: []int{18264, 16969},
 		UpdatedAt:           time.Unix(1700000001, 0),

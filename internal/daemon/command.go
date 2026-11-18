@@ -119,6 +119,13 @@ type Status struct {
 	PauseProcesses []string `json:"pause_processes"`
 	PauseMatches   []string `json:"pause_matches"`
 
+	// MacProfile is the Mac's cooling class ("fanless", "active_laptop",
+	// "desktop"); empty on Linux. RecommendedCPUs is the CPU thread budget
+	// for Folding@home from the last snapshot; 0 means the daemon leaves
+	// FAH's cpus alone (Linux).
+	MacProfile      string `json:"mac_profile"`
+	RecommendedCPUs int    `json:"recommended_cpus"`
+
 	// FoldingSeconds is the time Folding@home was seen running a work unit
 	// since the daemon started, and ProjectsContributed the projects of
 	// those work units, in the order they were first seen. Both are kept in
@@ -225,6 +232,8 @@ func (d *Daemon) publish() Status {
 		PauseListSupported:  d.pauseListSupported(),
 		PauseProcesses:      d.pauseProcesses,
 		PauseMatches:        d.pauseMatches,
+		MacProfile:          string(d.macProfile),
+		RecommendedCPUs:     d.recommendedCPUs,
 		FoldingSeconds:      int64(d.foldingTime / time.Second),
 		ProjectsContributed: d.projects,
 		UpdatedAt:           time.Now(),

@@ -40,10 +40,43 @@ const (
 )
 
 // ThermalPressureSerious is the lowest SystemSnapshot.ThermalLevel that pauses
-// folding. The levels are macOS's com.apple.system.thermalpressurelevel:
-// 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping. ProcessInfo reports
-// 2 as "serious" and 3 and above as "critical".
+// folding, except on a fanless Mac (see ThermalPauseLevel). The levels are
+// macOS's com.apple.system.thermalpressurelevel: 0 nominal, 1 moderate,
+// 2 heavy, 3 trapping, 4 sleeping. ProcessInfo reports 1 as "fair", 2 as
+// "serious" and 3 and above as "critical".
 const ThermalPressureSerious = 2
+
+// ThermalPressureModerate is thermal pressure level 1 (moderate, "fair").
+const ThermalPressureModerate = 1
+
+// MacThermalProfile is the cooling class of a Mac, which sets how many CPU
+// threads Folding@home may use and at which thermal pressure level folding
+// pauses. It is empty on Linux.
+type MacThermalProfile string
+
+const (
+	// ProfileFanless is a MacBook Air: no fan, so the CPU reaches 105 °C
+	// within seconds under an all-core load while the pressure level still
+	// reads 0 (incident 2026-11-18). One FAH thread; pauses at level 1.
+	ProfileFanless MacThermalProfile = "fanless"
+	// ProfileActiveLaptop is a MacBook Pro: fans, but a battery and a
+	// laptop chassis. Pauses at level 2.
+	ProfileActiveLaptop MacThermalProfile = "active_laptop"
+	// ProfileDesktop is a Mac without a battery (Mac mini, Mac Studio, iMac,
+	// Mac Pro). Pauses at level 2.
+	ProfileDesktop MacThermalProfile = "desktop"
+)
+
+// ThermalPauseLevel returns the lowest thermal pressure level that pauses
+// folding for profile: ThermalPressureModerate on a fanless Mac, where
+// waiting for level 2 means minutes at 105 °C, and ThermalPressureSerious
+// otherwise.
+func ThermalPauseLevel(profile MacThermalProfile) int {
+	if profile == ProfileFanless {
+		return ThermalPressureModerate
+	}
+	return ThermalPressureSerious
+}
 
 // ErrPerProcessUtilUnsupported is returned by a collector when the GPU driver
 // lists graphics processes but cannot attribute utilization to any of them.
@@ -245,6 +278,16 @@ type SystemSnapshot struct {
 	// ThermalPressureSerious). 0 means nominal or unknown: Linux always
 	// reports 0, and so does macOS when the level cannot be read.
 	ThermalLevel int
+
+	// MacProfile is the Mac's cooling class (macOS only); empty on Linux.
+	// It sets the thermal pause level (ThermalPauseLevel).
+	MacProfile MacThermalProfile
+
+	// RecommendedCPUs is how many CPU threads Folding@home may use right
+	// now, from MacProfile, the power source and ThermalLevel (macOS only).
+	// 0 means "do not touch FAH's cpus": always on Linux, where FAH folds on
+	// the GPU.
+	RecommendedCPUs int
 }
 
 // Evaluator decides the operating state based on consecutive snapshots. It does
@@ -257,7 +300,7 @@ type Evaluator struct {
 	lowLoadStreak  int
 	loadPaused     bool
 	// thermalPaused latches a thermal pause; coolStreak counts the ticks
-	// below ThermalPressureSerious since the last one at or above it.
+	// below the pause level since the last one at or above it.
 	thermalPaused bool
 	coolStreak    int
 	// heldSessions are the game sessions whose processes caused the current
@@ -325,8 +368,9 @@ func NewEvaluator(cfg Config) *Evaluator {
 //     its own utilization meets GPUMemRequiresUtilPct. Memory from one process
 //     is never combined with another process's utilization. When GPUProcesses
 //     is nil, the device-wide fields are used with the same rule.
-//  2. Thermal pressure at or above ThermalPressureSerious →
-//     StatePausedThermal, from the first tick.
+//  2. Thermal pressure at or above ThermalPauseLevel(s.MacProfile) (level 1
+//     on a fanless Mac, 2 otherwise) → StatePausedThermal, from the first
+//     tick.
 //  3. Low battery or battery folding disabled → StatePausedBattery.
 //  4. On battery with sufficient charge and folding allowed → StateFoldingEco.
 //  5. Any other case → StateFolding.
@@ -343,7 +387,7 @@ func NewEvaluator(cfg Config) *Evaluator {
 // (it has no cooldown and reflects the independent, higher-priority reason).
 //
 // A thermal pause is latched the same way: it lasts until
-// CooldownTicksRequired consecutive ticks below ThermalPressureSerious have
+// CooldownTicksRequired consecutive ticks below the pause level have
 // elapsed, so a machine that cools a few degrees does not resume and heat up
 // again within seconds. While the load latch is active but no load is seen,
 // the thermal reason is reported before the battery one.
@@ -355,7 +399,7 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 
 	batteryPause := s.HasBattery && !s.OnAC && (!e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct)
 	isHighLoad, sessions := e.isHighLoad(s)
-	thermalPause := e.thermalHeld(s.ThermalLevel)
+	thermalPause := e.thermalHeld(s.ThermalLevel, ThermalPauseLevel(s.MacProfile))
 
 	switch {
 	case isHighLoad:
@@ -413,9 +457,10 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 }
 
 // thermalHeld updates the thermal latch with this tick's level and reports
-// whether folding must stay paused for it. It must be called with e.mu held.
-func (e *Evaluator) thermalHeld(level int) bool {
-	if level >= ThermalPressureSerious {
+// whether folding must stay paused for it; pauseLevel is the lowest level
+// that pauses. It must be called with e.mu held.
+func (e *Evaluator) thermalHeld(level, pauseLevel int) bool {
+	if level >= pauseLevel {
 		e.thermalPaused, e.coolStreak = true, 0
 		return true
 	}
