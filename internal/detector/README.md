@@ -115,6 +115,10 @@ active.
 A failed thermal read never fails `Collect`: the last level is reused for 15
 calls (30 s), then 0 (unknown) is reported. Linux always reports 0.
 
+This is a backstop for sustained heat only. On the M4 Air the level stayed at
+0 with the CPU at 106 °C under FAH load
+(`docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`).
+
 ### Compute contention (Linux)
 
 The provider lists graphics **and** compute processes. CUDA work competes with

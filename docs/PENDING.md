@@ -10,6 +10,11 @@ Last updated: 2026-11-18 (M3 GUI on `feat/m3-gui`).
 
 ## Next session
 
+0. **macOS thermal incident (2026-11-18), blocks the GUI release on macOS.**
+   The M4 Air reached 106 °C while folding and EcoFold did not stop it. See
+   `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md` and the boxes under section 3
+   and "Open risks". Until it is fixed, do not leave FAH folding on the M4
+   unattended.
 1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
    while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
    with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
@@ -199,14 +204,21 @@ always stop folding.
   `client_uuid` in its preferences. Still nothing is sent anywhere.
   - [ ] Persist the totals across daemon restarts if the leaderboard needs
     lifetime figures.
-- [x] **macOS thermal guard** (2026-11-18; seen on the MacBook Air M4: CPU
-  105 °C, GPU 87 °C while folding). `DarwinCollector` reads
-  `com.apple.system.thermalpressurelevel` with `notifyutil`; serious or
-  critical (2+) pauses folding at once as `paused_thermal`, held for the load
-  cooldown after it drops. See `docs/MACOS_TELEMETRY.md`.
-  - [ ] Check on the M4 that FAH under load reaches level 2 and that the
-    pause brings the temperatures down; if the CPU still gets above ~100 °C
-    at level 1, add a rule for moderate pressure sustained for minutes.
+- [ ] **macOS thermal protection: the pressure guard is not enough**
+  (2026-11-18). `DarwinCollector` reads
+  `com.apple.system.thermalpressurelevel` and pauses at 2+ as
+  `paused_thermal` (`b476b77`). Live on the M4 Air the level stayed at 0
+  while the CPU was at 106 °C, so the guard never fired. See
+  `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
+  - [ ] Limit FAH's CPU threads on macOS through the v8 `cpus` option
+    (record and restore the user's value), with values measured on the M4.
+  - [ ] Trace the pressure level under sustained FAH load to see if and when
+    it reaches 1 or 2; decide on a rule for level 1 held for minutes.
+  - [ ] Document an emergency stop that works without the daemon.
+- [ ] **Single daemon instance** (incident 2026-11-18). A second daemon whose
+  socket is taken (`ipc.ErrAlreadyRunning`) keeps running without IPC,
+  shares the pause marker and drives FAH against the first one. Make
+  `ErrAlreadyRunning` fatal at startup.
 - [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
   with an XDG autostart entry / a LaunchAgent), and an application icon and
   bundle for macOS.
@@ -250,6 +262,12 @@ always stop folding.
   path counts as ownership (root-only).
 - [ ] **L2-1** (accepted, see `CHAOS_REPORT_LAYER2.md`): a user process can
   pose as `reaper SteamLaunch`; it only holds a pause its own load caused.
+
+- [ ] **INC-3 The daemon does not enforce its own pause** (incident
+  2026-11-18). A daemon in `paused_manual` with `paused_by_us: true` read FAH
+  as folding and did nothing; the status kept saying it was paused.
+  `Daemon.apply` acts only on transitions. Fix without breaking CH-10: a
+  resume the user makes in FAH stays the user's.
 
 ## After v0.1.0
 

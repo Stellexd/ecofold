@@ -33,7 +33,9 @@ macOS publishes its thermal pressure on the notify(3) key `com.apple.system.ther
 
 A level of 2 or more pauses folding on that tick. The pause lasts until the level has stayed below 2 for the load cooldown (60 ticks, two minutes), so the Mac is not heated again as soon as it drops a few degrees. A failed read does not fail the tick: the last level is kept for 15 ticks (30 s), then 0 (unknown) is assumed. `force_resume` answers `thermal_pressure` while the pause lasts.
 
-The level is the system's own judgement and has no temperatures behind it that EcoFold can read; the threshold has not yet been checked against a real thermal pause on the M4 (see `docs/PENDING.md`).
+The level is the system's own judgement and has no temperatures behind it that EcoFold can read.
+
+**Measured limitation (2026-11-18):** on the MacBook Air M4, the FAH CPU core (`FahCore_a9`, 4 threads, ~400 % CPU) took the CPU to 105–106 °C within 5–10 s, and the level stayed at `0` (`com.apple.system.thermalstatus` also `0`, `pmset -g therm` recorded no warning). The pressure level follows the system's sustained thermal state, not a die spike, so this guard cannot keep the CPU below 100 °C. It is a backstop only. See `docs/INCIDENT_2026-11-18_MACOS_THERMAL.md`.
 
 ## Collector and SQLite database
 
