@@ -72,6 +72,7 @@ const (
 	ModeFoldingEco    = "folding_eco"
 	ModePausedLoad    = "paused_load"
 	ModePausedBattery = "paused_battery"
+	ModePausedThermal = "paused_thermal"
 	ModePausedManual  = "paused_manual"
 	ModeDegraded      = "degraded"
 
@@ -92,7 +93,7 @@ const (
 	ToneGreen
 	// ToneBlue: paused by a game or GPU load.
 	ToneBlue
-	// ToneAmber: paused by the battery guard.
+	// ToneAmber: paused by the battery or the thermal guard.
 	ToneAmber
 )
 
@@ -134,7 +135,7 @@ func (v View) Tone() Tone {
 		return ToneGreen
 	case ModePausedLoad:
 		return ToneBlue
-	case ModePausedBattery:
+	case ModePausedBattery, ModePausedThermal:
 		return ToneAmber
 	default:
 		return ToneGray
@@ -160,6 +161,8 @@ func (v View) ModeLabel() string {
 		return "Paused (Game)"
 	case ModePausedBattery:
 		return "Paused (Battery)"
+	case ModePausedThermal:
+		return "Paused (Thermal)"
 	case ModePausedManual:
 		return "Paused (Manual)"
 	case ModeDegraded:
@@ -222,9 +225,12 @@ func (v View) foldingStall() (label string, stalled bool) {
 		return "Folding@home Not Reachable", true
 	case !f.Reachable:
 		return "", false // not asked yet
+	case f.Paused && v.Status.PausedByUs && v.Status.StartupHold:
+		// A pause from the previous run, kept until the startup hold ends.
+		return "Starting Folding…", true
 	case f.Paused && v.Status.PausedByUs:
-		// The daemon's own pause, about to be lifted (startup hold, or the
-		// resume has not gone through yet).
+		// The daemon's own pause, about to be lifted: the resume has not
+		// gone through yet.
 		return "Resuming Folding…", true
 	case f.Paused:
 		return "Paused in Folding@home", true
@@ -238,18 +244,11 @@ func (v View) foldingStall() (label string, stalled bool) {
 // number of projects it went to.
 func (v View) ComputeTimeLabel() string {
 	if !v.Connected {
-		return "Session compute time: —"
+		return "Session compute donated: —"
 	}
 	secs := v.Status.FoldingSeconds
-	label := fmt.Sprintf("Session compute time: %dh %dm", secs/3600, secs%3600/60)
-	switch n := len(v.Status.ProjectsContributed); n {
-	case 0:
-		return label
-	case 1:
-		return label + " · 1 project"
-	default:
-		return fmt.Sprintf("%s · %d projects", label, n)
-	}
+	return fmt.Sprintf("Session compute donated: %dh %dm · Projects: %d",
+		secs/3600, secs%3600/60, len(v.Status.ProjectsContributed))
 }
 
 // NewClientUUID returns a random (version 4) UUID. It identifies this

@@ -339,7 +339,7 @@ func TestPanelLeaderboardOptIn(t *testing.T) {
 		t.Fatalf("client_uuid = %q", id)
 	}
 	p.update(linuxView())
-	if p.compute.Text != "Session compute time: 1h 23m · 1 project" {
+	if p.compute.Text != "Session compute donated: 1h 23m · Projects: 1" {
 		t.Fatalf("tiempo = %q", p.compute.Text)
 	}
 	if p.shareCheck.Text != "Share anonymous compute stats on the Global Leaderboard" ||

@@ -593,7 +593,8 @@ func TestStatusMatchesTheDaemonWireFormat(t *testing.T) {
 	for client, server := range map[string]daemon.Mode{
 		ModeStarting: daemon.ModeStarting, ModeFolding: daemon.ModeFolding, ModeFoldingEco: daemon.ModeFoldingEco,
 		ModePausedLoad: daemon.ModePausedLoad, ModePausedBattery: daemon.ModePausedBattery,
-		ModePausedManual: daemon.ModePausedManual, ModeDegraded: daemon.ModeDegraded,
+		ModePausedThermal: daemon.ModePausedThermal,
+		ModePausedManual:  daemon.ModePausedManual, ModeDegraded: daemon.ModeDegraded,
 	} {
 		if client != string(server) {
 			t.Errorf("modo del cliente %q, del daemon %q", client, server)
@@ -624,6 +625,13 @@ func TestHeaderDoesNotClaimFoldingWhilePaused(t *testing.T) {
 			t.Errorf("%s: %q / %q", mode, v.ModeLabel(), v.FAHLabel())
 		}
 
+		// During the startup hold the same pause is a start, not a resume.
+		s.StartupHold = true
+		if v.Tone() == ToneGreen || v.ModeLabel() != "Starting Folding…" || v.Headline() != "Starting Folding…" {
+			t.Errorf("%s en la espera inicial: %s / %q", mode, v.Tone().Name(), v.ModeLabel())
+		}
+		s.StartupHold = false
+
 		// FAH leaves the pause: now it is folding.
 		s.PausedByUs, s.FAH.Paused, s.FAH.State = false, false, "folding"
 		if v.Tone() != ToneGreen || !strings.HasPrefix(v.ModeLabel(), "Folding") {
@@ -634,18 +642,18 @@ func TestHeaderDoesNotClaimFoldingWhilePaused(t *testing.T) {
 
 func TestContributionLabels(t *testing.T) {
 	v := View{Connected: true}
-	if got := v.ComputeTimeLabel(); got != "Session compute time: 0h 0m" {
+	if got := v.ComputeTimeLabel(); got != "Session compute donated: 0h 0m · Projects: 0" {
 		t.Errorf("sin aporte = %q", got)
 	}
 	v.Status.FoldingSeconds, v.Status.ProjectsContributed = 5025, []int{18264}
-	if got := v.ComputeTimeLabel(); got != "Session compute time: 1h 23m · 1 project" {
+	if got := v.ComputeTimeLabel(); got != "Session compute donated: 1h 23m · Projects: 1" {
 		t.Errorf("aporte = %q", got)
 	}
 	v.Status.FoldingSeconds, v.Status.ProjectsContributed = 100*3600+59, []int{1, 2, 3}
-	if got := v.ComputeTimeLabel(); got != "Session compute time: 100h 0m · 3 projects" {
+	if got := v.ComputeTimeLabel(); got != "Session compute donated: 100h 0m · Projects: 3" {
 		t.Errorf("aporte largo = %q", got)
 	}
-	if got := (View{}).ComputeTimeLabel(); got != "Session compute time: —" {
+	if got := (View{}).ComputeTimeLabel(); got != "Session compute donated: —" {
 		t.Errorf("sin daemon = %q", got)
 	}
 
@@ -678,6 +686,7 @@ func TestViewLabels(t *testing.T) {
 			ToneGreen, "Folding (on battery)", "Pause Folding"},
 		{"juego", mk(ModePausedLoad, func(s *Status) { s.PowerLimitW = 145 }), ToneBlue, "Paused (Game) — 145 W", "Pause Folding"},
 		{"batería", mk(ModePausedBattery, func(s *Status) { s.PowerCapable = false }), ToneAmber, "Paused (Battery)", "Pause Folding"},
+		{"térmica", mk(ModePausedThermal, func(s *Status) { s.PowerCapable = false }), ToneAmber, "Paused (Thermal)", "Pause Folding"},
 		{"manual", mk(ModePausedManual, func(s *Status) { s.ManualOverride, s.PowerLimitW = OverridePause, 145 }),
 			ToneGray, "Paused (Manual) — 145 W", "Resume Folding"},
 		{"manual durante un juego", mk(ModePausedLoad, func(s *Status) { s.ManualOverride, s.PowerLimitW = OverridePause, 145 }),
