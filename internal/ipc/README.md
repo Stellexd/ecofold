@@ -131,9 +131,10 @@ Notes:
   it is the user's consent; it is the one exception to "the daemon never
   resumes a user pause" (CH-10, invariant I1).
 - `force_resume` does not resume while the detector's current decision is a
-  pause (`game_active`, `on_battery`), or if the eco limit cannot be applied
-  (`cap_failed`). The manual pause is cleared in all three cases, so the
-  daemon resumes its own pause automatically once conditions allow.
+  pause (`game_active`, `on_battery`, `thermal_pressure`), or if the eco
+  limit cannot be applied (`cap_failed`). The manual pause is cleared in
+  every case, so the daemon resumes its own pause automatically once
+  conditions allow.
 - In Degraded mode, or without permission to set power limits, `force_resume`
   resumes at the default limit. The status shows `degraded` or
   `power_enabled: false`.
@@ -156,6 +157,7 @@ Notes:
 | `cap_failed` | The driver rejected the power limit. The previous value stays. |
 | `game_active` | Not resumed: the detector sees a game or GPU load. |
 | `on_battery` | Not resumed: battery guard. |
+| `thermal_pressure` | Not resumed: macOS thermal guard. |
 | `fah_unavailable` | Folding@home did not confirm the pause or resume. |
 | `busy` | The control loop did not take the command within 3 s. A command the loop never took has no effect. |
 | `stopping` | The daemon is shutting down. |
@@ -172,6 +174,7 @@ again.
   "mode": "folding",
   "manual_override": "none",
   "paused_by_us": false,
+  "startup_hold": false,
   "degraded": false,
   "power_capable": true,
   "power_enabled": true,
@@ -197,10 +200,16 @@ again.
 ```
 
 - `mode`: `starting`, `folding`, `folding_eco`, `paused_load`,
-  `paused_battery`, `paused_manual` or `degraded`.
+  `paused_battery`, `paused_thermal`, `paused_manual` or `degraded`.
+  `paused_thermal` is macOS's thermal guard: the system reported serious or
+  critical thermal pressure, and the pause lasts the load cooldown (two
+  minutes) after it drops.
 - `manual_override`: `none` or `pause`.
 - `paused_by_us`: the current FAH pause is the daemon's, so the daemon will
   resume it.
+- `startup_hold`: `paused_by_us` is a pause inherited from the previous run
+  that the startup hold still keeps (one cooldown after the daemon starts).
+  A client can say "starting" instead of "resuming".
 - `pause_list_supported`: false where `set_pause_processes` answers
   `unsupported` (macOS), so a client can disable the control up front.
 - The status is a snapshot taken at `updated_at`, at the end of the last tick

@@ -6,7 +6,7 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-17 (M3 GUI on `feat/m3-gui`).
+Last updated: 2026-11-18 (M3 GUI on `feat/m3-gui`).
 
 ## Next session
 
@@ -190,13 +190,23 @@ always stop folding.
   "Folding (on battery)" in green over "paused by EcoFold"). While the mode
   allows folding the header now follows FAH: "Resuming Folding…" for the
   daemon's own pause, "Paused in Folding@home" for the user's, "Idle (Waiting
-  for Work Unit)" without a work unit; all gray.
+  for Work Unit)" without a work unit; all gray. During the startup hold
+  (`startup_hold` in the status) it says "Starting Folding…" instead.
 - [x] **Contribution counters.** The daemon publishes `folding_seconds` and
   `projects_contributed` for its current run (memory only), and the
-  leaderboard card shows "Session compute time". The GUI keeps a random
+  leaderboard card shows "Session compute donated: Xh Ym · Projects: N". The
+  GUI keeps a random
   `client_uuid` in its preferences. Still nothing is sent anywhere.
   - [ ] Persist the totals across daemon restarts if the leaderboard needs
     lifetime figures.
+- [x] **macOS thermal guard** (2026-11-18; seen on the MacBook Air M4: CPU
+  105 °C, GPU 87 °C while folding). `DarwinCollector` reads
+  `com.apple.system.thermalpressurelevel` with `notifyutil`; serious or
+  critical (2+) pauses folding at once as `paused_thermal`, held for the load
+  cooldown after it drops. See `docs/MACOS_TELEMETRY.md`.
+  - [ ] Check on the M4 that FAH under load reaches level 2 and that the
+    pause brings the temperatures down; if the CPU still gets above ~100 °C
+    at level 1, add a rule for moderate pressure sustained for minutes.
 - [ ] GUI follow-ups, none needed to close M3: start at login (`-hidden`
   with an XDG autostart entry / a LaunchAgent), and an application icon and
   bundle for macOS.

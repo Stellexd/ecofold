@@ -96,6 +96,25 @@ lasts two to three minutes. It never delays `StatePausedBattery`: if the load is
 gone but the battery demands a pause during the cooldown, `StatePausedBattery`
 is returned.
 
+### Thermal guard (macOS)
+
+`DarwinCollector` reads `notifyutil -g com.apple.system.thermalpressurelevel`
+on every `Collect` (no root, no cgo, 1 s timeout, 4 KiB output cap) into
+`SystemSnapshot.ThermalLevel`: 0 nominal, 1 moderate, 2 heavy ("serious" in
+`ProcessInfo`), 3 trapping and 4 sleeping ("critical"). A level of
+`ThermalPressureSerious` (2) or more returns `StatePausedThermal` on the first
+tick, without `SustainedTicksRequired`. The pause is latched for
+`CooldownTicksRequired` consecutive ticks below 2, so a Mac that cools a few
+degrees does not resume and heat up again; a new serious tick restarts the
+count.
+
+A current game load keeps reporting `StatePausedLoad`. Otherwise the thermal
+reason is reported before the battery one, also while the load latch is
+active.
+
+A failed thermal read never fails `Collect`: the last level is reused for 15
+calls (30 s), then 0 (unknown) is reported. Linux always reports 0.
+
 ### Compute contention (Linux)
 
 The provider lists graphics **and** compute processes. CUDA work competes with

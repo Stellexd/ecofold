@@ -22,6 +22,7 @@ When writing or modifying hardware, GPU, or process detection code, enforce thes
 
 4. **macOS Apple Silicon Telemetry & Detection (`//go:build darwin`):**
    - It is permitted to call `/usr/sbin/ioreg -a -r -d 1 -c IOAccelerator` and `-c AppleSmartBattery` only through the bounded fetcher (`FetchIORegContext`: context deadline, 2 MiB output cap). `DarwinCollector` reads `IOAccelerator` once per daemon tick (never more often than every 2 s) and caches `AppleSmartBattery` for 15 ticks (30 s). Never call `ioreg` in a tighter loop.
+   - It is permitted to call `/usr/bin/notifyutil -g com.apple.system.thermalpressurelevel` only through `FetchThermalPressureContext` (1 s timeout, 4 KiB output cap), once per `Collect`. A level of 2 (serious) or more makes the evaluator return `StatePausedThermal`; a failed read must never fail `Collect`.
    - The resulting XML property list must be parsed **in memory** using `howett.net/plist` (pure Go, no cgo). Never link against IOKit frameworks.
    - Decode `AppleSmartBattery` for electrical state and `IOAccelerator` for GPU utilization.
    - Electrical-state mapping must follow `MACOS_TELEMETRY.md` and `internal/detector/README.md`:
