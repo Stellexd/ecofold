@@ -543,13 +543,49 @@ func (d *Daemon) readFAH(ctx context.Context) (fah.Status, error) {
 }
 
 // refreshFAH reads the FAH status again when the last observation is
-// fahRefreshTicks ticks old. It only feeds Status: decisions read FAH
-// themselves when they need it.
+// fahRefreshTicks ticks old. It feeds Status and catches FAH folding while
+// the daemon believes it holds a pause (see reconcileResume); other decisions
+// read FAH themselves when they need it.
 func (d *Daemon) refreshFAH(ctx context.Context) {
 	if d.fahAge++; d.fahAge < fahRefreshTicks {
 		return
 	}
-	_, _ = d.readFAH(ctx)
+	if st, err := d.readFAH(ctx); err == nil && !st.Paused && d.pausedByUs {
+		d.reconcileResume(ctx)
+	}
+}
+
+// reconcileResume handles FAH found unpaused while the daemon owns the pause
+// (incident 2026-11-18, 3.3). During a load, battery or thermal pause the
+// reason still holds, so FAH is paused again on this pass. Otherwise the
+// resume came from outside EcoFold, most likely the user in FAH's own UI, and
+// it stays theirs (CH-10): ownership, the manual override and the marker are
+// dropped, so the status stops reporting a pause that is not there.
+func (d *Daemon) reconcileResume(ctx context.Context) {
+	if !d.degraded && d.haveDecision && isPause(d.lastDecision) {
+		d.log.Warn("folding@home resumed outside EcoFold during a protective pause; pausing it again", "mode", d.mode)
+		d.pending = opPause
+		d.runPending(ctx)
+		return
+	}
+	if d.manual == OverridePause {
+		d.log.Info("folding@home resumed outside EcoFold; manual pause cleared")
+		d.manual = OverrideNone
+	} else {
+		d.log.Info("folding@home resumed outside EcoFold; the daemon no longer owns a pause")
+	}
+	d.pausedByUs = false
+	d.pending = opNone
+	d.resumeHold = 0
+	if err := d.marker.clear(); err != nil {
+		d.log.Warn("could not remove the pause marker", "err", err)
+	}
+	if !d.degraded {
+		d.mode = ModeStarting
+		if d.haveDecision {
+			d.mode = Mode(d.lastDecision)
+		}
+	}
 }
 
 // observeFAH records the outcome of a FAH call. On failure the last known
