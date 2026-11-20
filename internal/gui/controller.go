@@ -313,9 +313,11 @@ func describeOffline(err error) (reason, hint string) {
 	case errors.Is(err, fs.ErrPermission):
 		return "Access denied", `Add your user to the "ecofold" group and log in again.`
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF),
-		errors.Is(err, syscall.ECONNRESET), errors.Is(err, syscall.EPIPE):
+		errors.Is(err, syscall.ECONNRESET), errors.Is(err, syscall.EPIPE),
+		errors.Is(err, syscall.ENOTCONN):
 		// The daemon accepted the connection and hung up without a word:
-		// that is how it refuses a peer it does not authorize.
+		// that is how it refuses a peer it does not authorize. macOS
+		// reports a write after that hang-up as ENOTCONN.
 		return "Access denied", "The daemon closed the connection. It only accepts its own user and the socket group."
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ECONNREFUSED):
 		return "Daemon not running", "Start ecofold-daemon; this window reconnects by itself."
