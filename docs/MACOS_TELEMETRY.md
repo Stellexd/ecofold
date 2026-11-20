@@ -28,6 +28,11 @@ macOS has no `/proc`, but two unprivileged sources name processes:
 
 ## Thermal guard
 
+> **Warning:** EcoFold is not recommended at all on computers without
+> active cooling (fanless laptops such as the MacBook Air). Even with the
+> 1-thread CPU budget and the thermal guard, Folding@home keeps a fanless
+> machine hot for hours. Use it on machines with fans.
+
 On a fanless MacBook Air M4, running the Folding@home client took the CPU to 105 °C and the GPU to 87 °C. The GPU-utilization and battery rules did not catch it: FAH's own load is not a game.
 
 macOS publishes its thermal pressure on the notify(3) key `com.apple.system.thermalpressurelevel`, readable without root through `/usr/bin/notifyutil -g com.apple.system.thermalpressurelevel` (output: `com.apple.system.thermalpressurelevel 0`). `DarwinCollector` reads it on every tick, with a 1 s timeout and a 4 KiB output cap, into `SystemSnapshot.ThermalLevel`.

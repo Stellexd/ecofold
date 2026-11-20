@@ -6,17 +6,18 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-18 (macOS pause list and per-app GPU time).
+Last updated: 2026-11-20 (macOS hardware checks done).
+
+> **Warning:** EcoFold is not recommended at all on computers without
+> active cooling (fanless laptops such as the MacBook Air). Even with the
+> 1-thread CPU budget and the thermal guard, Folding@home keeps a fanless
+> machine hot for hours. Use it on machines with fans.
 
 ## Next session
 
-0. **macOS thermal incident (2026-11-18): fixed in code, not yet seen live
-   under load.** Single instance, `-pause-fah`, the manual-pause marker, the
-   pause enforcement (INC-3) and the FAH CPU thread budget are implemented and
-   tested with fakes; `SetCPUs` was checked against the real `fah-client`
-   8.5.6 with FAH paused. Next: run the daemon on the M4 Air with FAH folding
-   and watch the temperature with the budget of 1 thread (boxes under
-   section 3). Until then, do not leave FAH folding on the M4 unattended.
+0. **macOS thermal incident (2026-11-18): closed.** The macOS hardware checks
+   are done (2026-11-20). EcoFold is still **not recommended on Macs without
+   active cooling** (see the warning above).
 1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
    while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
    with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
@@ -37,10 +38,10 @@ Last updated: 2026-11-18 (macOS pause list and per-app GPU time).
 ### To close M3 (issue #3)
 
 - [ ] Try the GUI on the CachyOS desktop (checklist in section 3).
-- [ ] Run the M4 Air with FAH folding on the 1-thread CPU budget and watch
+- [x] Run the M4 Air with FAH folding on the 1-thread CPU budget and watch
   the temperature (item 0).
-- [ ] macOS pause list on AC: folding resumes 2 minutes after the matching
-  app quits. Only checked on battery so far.
+- [x] macOS pause list on AC: folding resumes 2 minutes after the matching
+  app quits (checked on battery and on AC).
 - [ ] Start the unit without the `ecofold` group: it must start, log
   `socket group not found` and leave the socket `0600`.
 - [ ] Security review of the socket (`security-audit` skill, `standard`
@@ -150,7 +151,7 @@ always stop folding.
   `calculator` and `notificationcenter` (from `NotificationCent`), the mode
   went to `paused_load` 3 ticks later and back to `paused_battery` on the
   first tick after Calculator quit.
-  - [ ] Not yet seen on AC: the resume of folding after the 2-minute cooldown
+  - [x] Seen on AC (2026-11-20): the resume of folding after the 2-minute cooldown
     once the matching app quits. On battery the battery pause takes over, so
     the cooldown never shows.
 - [ ] macOS per-app GPU time (`SystemSnapshot.GPUApps`, from `AppUsage` in
@@ -195,7 +196,7 @@ always stop folding.
     works, the window's X hides it instead of quitting, and Pause Folding
     turns the icon gray, pauses FAH and restores 145 W.
   - [ ] KDE Plasma: the icon turns blue during a game.
-  - [ ] macOS: the menu bar icon and menu, and the control panel with the
+  - [x] macOS: the menu bar icon and menu, and the control panel with the
     power control hidden and the pause list disabled.
   - [ ] Against the real daemon: resume (also during a game, to see the
     `game_active` message), the eco limit applied while folding and the
@@ -252,7 +253,7 @@ always stop folding.
     in 5–10 s. Profiles `fanless` / `active_laptop` / `desktop` from
     `hw.model` (`internal/detector/darwin_profile.go`); budget applied before
     every resume and restored on exit (`docs/MACOS_TELEMETRY.md`).
-  - [ ] Run the daemon on the M4 Air with FAH folding and confirm it sets
+  - [x] Run the daemon on the M4 Air with FAH folding and confirm it sets
     `cpus` 1 and the CPU stays at or below 70 °C; restart the daemon and
     check the user's value comes back.
   - [ ] Measure the MacBook Pro and desktop budgets (Mac Studio M1 Max is

@@ -14,6 +14,7 @@ On macOS, AC presence is derived from `AppleSmartBattery.ExternalConnected` when
 
 ## Known limitations
 
+- **Not recommended on computers without active cooling** (fanless laptops such as the MacBook Air). Folding@home keeps the CPU near its thermal limit; EcoFold's CPU budget and thermal guard reduce the heat but do not make it safe for long runs. See [docs/MACOS_TELEMETRY.md](docs/MACOS_TELEMETRY.md#thermal-guard).
 - The battery-less desktop fixture used for testing is synthetic; a real Mac Studio dump is not yet available.
 
 ## License
