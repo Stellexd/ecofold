@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -123,8 +124,8 @@ func TestPanelOnLinux(t *testing.T) {
 	if p.pauseEntry.Disabled() || p.pauseEntry.Text != "blender, obs*" || !p.pauseSave.Disabled() {
 		t.Fatalf("lista de pausa: disabled=%v texto=%q", p.pauseEntry.Disabled(), p.pauseEntry.Text)
 	}
-	if p.pauseBtn.Disabled() || p.resume.Disabled() {
-		t.Fatal("botones de pausa deshabilitados con el daemon conectado")
+	if p.pauseBtn.Disabled() || !p.resume.Disabled() {
+		t.Fatal("plegando se esperaba Pause habilitado y Resume deshabilitado")
 	}
 	if p.updated.Text != "Updated 15:04:05" {
 		t.Fatalf("hora = %q", p.updated.Text)
@@ -374,5 +375,48 @@ func TestPanelLeaderboardOptIn(t *testing.T) {
 	again.shareCheck.SetChecked(false)
 	if prefs.Bool(prefShareStats) || !again.aliasEntry.Disabled() || prefs.String(prefPublicAlias) != "stellex" {
 		t.Fatal("desmarcar no desactivó el ranking")
+	}
+}
+
+// TestDisabledButtonExplainsWhy: a disabled button says why on hover, and an
+// enabled one shows nothing.
+func TestDisabledButtonExplainsWhy(t *testing.T) {
+	p, _, _ := newTestPanel(t)
+	p.update(linuxView())
+
+	p.resume.MouseIn(&desktop.MouseEvent{})
+	if !p.tips.box.Visible() || p.tips.text.Text != "Folding is already running." {
+		t.Fatalf("aviso de Resume: visible=%v texto=%q", p.tips.box.Visible(), p.tips.text.Text)
+	}
+	below := p.tips.box.Position().Y - fyne.CurrentApp().Driver().AbsolutePositionForObject(p.resume).Y
+	if below < p.resume.Size().Height || p.tips.box.Size().Height < p.tips.text.MinSize().Height {
+		t.Fatalf("aviso mal ubicado: %v %v", p.tips.box.Position(), p.tips.box.Size())
+	}
+
+	// The state changes under the mouse: the hint follows it.
+	v := linuxView()
+	v.Status.Mode = gui.ModePausedLoad
+	p.update(v)
+	if !strings.Contains(p.tips.text.Text, "cooldown") {
+		t.Fatalf("el aviso no siguió al estado: %q", p.tips.text.Text)
+	}
+	p.resume.MouseOut()
+	if p.tips.box.Visible() {
+		t.Fatal("el aviso sigue visible sin el mouse encima")
+	}
+
+	p.pauseBtn.MouseIn(&desktop.MouseEvent{})
+	if p.tips.box.Visible() {
+		t.Fatal("aviso sobre un botón habilitado")
+	}
+	p.pauseBtn.MouseOut()
+
+	// Resumed under the mouse: the button is enabled and the hint goes away.
+	v.Status.Mode, v.Status.ManualOverride = gui.ModePausedManual, gui.OverridePause
+	p.update(linuxView())
+	p.resume.MouseIn(&desktop.MouseEvent{})
+	p.update(v)
+	if p.tips.box.Visible() || p.resume.Disabled() {
+		t.Fatal("Resume con pausa manual debe estar habilitado y sin aviso")
 	}
 }

@@ -57,7 +57,6 @@ func newMetricTile() (metricTile, fyne.CanvasObject) {
 		value:   widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 	}
 	t.caption.SizeName = theme.SizeNameCaptionText
-	t.caption.Importance = widget.LowImportance
 	// Three columns leave no room for a larger figure ("Firmware Managed").
 	t.value.Truncation = fyne.TextTruncateEllipsis
 	return t, container.NewVBox(t.caption, t.value)
@@ -75,8 +74,9 @@ type panel struct {
 	sessions *widget.Label
 	badge    *widget.Label
 	offline  *widget.Label
-	pauseBtn *widget.Button
-	resume   *widget.Button
+	pauseBtn *hintButton
+	resume   *hintButton
+	tips     *tipLayer
 
 	engine      *widget.Select
 	engineNote  *widget.Label
@@ -140,8 +140,10 @@ func newPanel(act actions) *panel {
 	p.badge.Importance = widget.WarningImportance
 	p.offline = widget.NewLabel("")
 	p.offline.Wrapping = fyne.TextWrapWord
-	p.pauseBtn = widget.NewButtonWithIcon("Pause Folding", theme.MediaPauseIcon(), func() { p.act.pause() })
-	p.resume = widget.NewButtonWithIcon("Resume Folding", theme.MediaPlayIcon(), func() { p.act.resume() })
+	p.tips = newTipLayer()
+	p.pauseBtn = newHintButton("Pause Folding", theme.MediaPauseIcon(), func() { p.act.pause() })
+	p.resume = newHintButton("Resume Folding", theme.MediaPlayIcon(), func() { p.act.resume() })
+	p.pauseBtn.onHover, p.resume.onHover = p.tips.hover, p.tips.hover
 
 	dotBox := container.NewGridWrap(fyne.NewSize(18, 18), p.dot)
 	header := container.NewVBox(
@@ -184,14 +186,13 @@ func newPanel(act actions) *panel {
 	p.projOrg.Wrapping = fyne.TextWrapWord
 	p.projSummary = widget.NewLabel("")
 	p.projSummary.Wrapping = fyne.TextWrapWord
-	p.projSummary.Importance = widget.LowImportance
+	p.projSummary.TextStyle = fyne.TextStyle{Italic: true}
 	p.projBtn = widget.NewButtonWithIcon("View Project Details…", theme.SearchIcon(), func() {
 		if p.projectID > 0 {
 			p.act.openURL(gui.ProjectURL(p.projectID))
 		}
 	})
 	p.projNone = widget.NewLabel("")
-	p.projNone.Importance = widget.LowImportance
 	p.projBox = container.NewVBox(p.projTitle, p.projCause, p.projOrg, p.projSummary,
 		container.NewHBox(p.projBtn))
 	impactBox := container.NewVBox(
@@ -280,7 +281,7 @@ func newPanel(act actions) *panel {
 	boardNote := widget.NewLabel("100% optional. Helps track total community hours and work units donated. " +
 		"Nothing is sent yet: your choice is saved for when the leaderboard opens.")
 	boardNote.Wrapping = fyne.TextWrapWord
-	boardNote.Importance = widget.LowImportance
+	boardNote.SizeName = theme.SizeNameCaptionText
 	boardCard := widget.NewCard("Community Leaderboard (Opt-in)", "",
 		container.NewVBox(p.compute, p.shareCheck, p.aliasEntry, boardNote))
 
@@ -290,7 +291,9 @@ func newPanel(act actions) *panel {
 	statusBar := container.NewBorder(widget.NewSeparator(), nil, nil, p.updated, p.message)
 
 	body := container.NewVBox(header, impactCard, boardCard, gpuCard, p.batteryCard, pauseCard, layout.NewSpacer())
-	p.root = container.NewBorder(nil, statusBar, nil, nil, container.NewPadded(container.NewVScroll(body)))
+	p.root = container.NewStack(
+		container.NewBorder(nil, statusBar, nil, nil, container.NewPadded(container.NewVScroll(body))),
+		p.tips.layer)
 	p.boxes = []*fyne.Container{p.projBox, impactBox, ecoRight, p.ecoBox, p.grid, gpuBox, pauseBox, header, body, statusBar}
 	return p
 }
@@ -316,8 +319,9 @@ func (p *panel) update(v gui.View) {
 	}
 	show(p.sessions, on && len(s.GameSessions) > 0)
 	p.sessions.SetText("Game sessions: " + strings.Join(s.GameSessions, ", "))
-	enable(p.pauseBtn, on && s.ManualOverride != gui.OverridePause)
-	enable(p.resume, on)
+	p.pauseBtn.setHint(v.PauseHint())
+	p.resume.setHint(v.ResumeHint())
+	p.tips.refresh()
 
 	// Scientific impact. Without metadata (not fetched yet, or no network)
 	// the card still names the project and links to it.
