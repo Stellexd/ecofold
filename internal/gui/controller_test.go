@@ -380,6 +380,28 @@ func TestEcoWattsRangeIsCheckedLocally(t *testing.T) {
 	}
 }
 
+// TestNotify: a note from the UI reaches the view's message without a
+// request to the daemon.
+func TestNotify(t *testing.T) {
+	path := socketPath(t)
+	d := newFakeDaemon()
+	startDaemon(t, path, d)
+	var seen []string
+	c := New(Config{SocketPath: path, OnChange: func(v View) { seen = append(seen, v.Message) }})
+	c.Refresh(bg)
+
+	c.Notify("Install command copied to clipboard")
+	if v := c.View(); v.MessageIsError || v.Message != "Install command copied to clipboard" || v.MessageAt.IsZero() {
+		t.Fatalf("mensaje = %q (error=%v)", v.Message, v.MessageIsError)
+	}
+	if len(seen) == 0 || seen[len(seen)-1] != "Install command copied to clipboard" {
+		t.Fatalf("OnChange no recibió el aviso: %q", seen)
+	}
+	if got := d.commands(); len(got) != 0 {
+		t.Fatalf("Notify envió %d comandos", len(got))
+	}
+}
+
 // TestAccessDenied covers both ways the daemon keeps a user out: the socket
 // file's mode, and hanging up on a peer it does not authorize.
 func TestAccessDenied(t *testing.T) {

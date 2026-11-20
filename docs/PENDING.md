@@ -290,6 +290,10 @@ always stop folding.
   freezes the FAH container (`docker pause`) and EcoFold cannot reach the
   API.
 - [ ] macOS `.dmg` (telemetry + FAH control only; no TDP on Apple Silicon).
+- [ ] Folding@home v8 is installed separately, never bundled: declare
+  `optdepends=('foldingathome' 'docker')` in the AUR `PKGBUILD` and say so in
+  the `caveats` of the Homebrew tap. The GUI's "Folding@home Setup" card only
+  links to the official download and offers a command to copy.
 - [ ] README with install, permissions and known limitations.
 - [ ] Tag `v0.1.0` on `main` once every box above is ticked.
 

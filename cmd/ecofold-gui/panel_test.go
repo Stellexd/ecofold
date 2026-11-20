@@ -3,11 +3,13 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
@@ -21,6 +23,11 @@ type recorder struct {
 	watts           []int
 	lists           []string
 	urls            []string
+	refreshes       int
+	notes           []string
+	// guide is what detectFAH finds; detects counts the lookups.
+	guide   gui.FAHInstallGuide
+	detects int
 }
 
 func (r *recorder) actions() actions {
@@ -30,6 +37,12 @@ func (r *recorder) actions() actions {
 		setEcoWatts:  func(w int) { r.watts = append(r.watts, w) },
 		setPauseList: func(s string) { r.lists = append(r.lists, s) },
 		openURL:      func(u string) { r.urls = append(r.urls, u) },
+		refresh:      func() { r.refreshes++ },
+		notify:       func(m string) { r.notes = append(r.notes, m) },
+		detectFAH: func() gui.FAHInstallGuide {
+			r.detects++
+			return r.guide
+		},
 	}
 }
 
@@ -419,4 +432,134 @@ func TestDisabledButtonExplainsWhy(t *testing.T) {
 	if p.tips.box.Visible() || p.resume.Disabled() {
 		t.Fatal("Resume con pausa manual debe estar habilitado y sin aviso")
 	}
+}
+
+// newSetupPanel is newTestPanel with a recorder whose detection finds g.
+func newSetupPanel(t *testing.T, g gui.FAHInstallGuide) (*panel, *recorder) {
+	t.Helper()
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+	rec := &recorder{guide: g}
+	p := newPanel(rec.actions())
+	w := test.NewWindow(p.root)
+	w.Resize(fyne.NewSize(540, 780))
+	t.Cleanup(w.Close)
+	return p, rec
+}
+
+// unreachableView is a connected daemon that asked Folding@home and got no
+// answer.
+func unreachableView() gui.View {
+	v := linuxView()
+	v.Status.FAH.Reachable, v.Status.FAH.State, v.Status.FAH.ActiveProjectID = false, "", 0
+	return v
+}
+
+func TestFAHSetupCardVisibility(t *testing.T) {
+	missing := gui.DetectFAHInstall("linux", func(string) (string, error) { return "/usr/bin/yay", nil },
+		func(string) bool { return false })
+	p, rec := newSetupPanel(t, missing)
+	if rec.detects != 1 {
+		t.Fatalf("detecciones al construir el panel = %d, quiero 1", rec.detects)
+	}
+
+	cases := []struct {
+		name string
+		view gui.View
+		want bool
+	}{
+		{"conectado y FAH sin respuesta", unreachableView(), true},
+		{"FAH responde", linuxView(), false},
+		{"daemon desconectado", gui.View{Offline: "Daemon not running"}, false},
+		{"FAH aún no consultado", func() gui.View {
+			v := unreachableView()
+			v.Status.FAH.ObservedAt = time.Time{}
+			return v
+		}(), false},
+	}
+	for _, tc := range cases {
+		p.update(tc.view)
+		if p.setupCard.Visible() != tc.want {
+			t.Fatalf("%s: tarjeta visible=%v, quiero %v", tc.name, p.setupCard.Visible(), tc.want)
+		}
+	}
+	// It comes back when FAH stops answering again, and polls never detect.
+	p.update(unreachableView())
+	if !p.setupCard.Visible() || rec.detects != 1 {
+		t.Fatalf("visible=%v detecciones=%d", p.setupCard.Visible(), rec.detects)
+	}
+}
+
+func TestFAHSetupCardActions(t *testing.T) {
+	missing := gui.DetectFAHInstall("linux", func(b string) (string, error) {
+		if b == "docker" {
+			return "/usr/bin/docker", nil
+		}
+		return "", errors.New("not found")
+	}, func(string) bool { return false })
+	p, rec := newSetupPanel(t, missing)
+	w := test.NewWindow(nil) // keeps the clipboard's owner alive
+	t.Cleanup(w.Close)
+	p.update(unreachableView())
+
+	if p.setupCard.Subtitle != "Folding@home Not Installed" || !p.setupCmdBox.Visible() ||
+		p.setupLabel.Text != "Run via Docker" || !strings.Contains(p.setupCmd.Text, "127.0.0.1:7396:7396") {
+		t.Fatalf("tarjeta: %q / %q / %q", p.setupCard.Subtitle, p.setupLabel.Text, p.setupCmd.Text)
+	}
+
+	test.Tap(findButton(t, p.root, "Copy Command"))
+	if got := fyne.CurrentApp().Clipboard().Content(); got != missing.InstallCommand {
+		t.Fatalf("portapapeles = %q", got)
+	}
+	if len(rec.notes) != 1 || rec.notes[0] != "Install command copied to clipboard" {
+		t.Fatalf("avisos = %q", rec.notes)
+	}
+
+	test.Tap(findButton(t, p.root, "Download Folding@home"))
+	if len(rec.urls) != 1 || rec.urls[0] != "https://foldingathome.org/start-folding/" {
+		t.Fatalf("urls = %q", rec.urls)
+	}
+
+	// Installed meanwhile: Check Again detects again, drops the command and
+	// asks the daemon at once.
+	rec.guide = gui.DetectFAHInstall("linux", func(string) (string, error) { return "", errors.New("no") },
+		func(p string) bool { return p == "/usr/bin/fah-client" })
+	test.Tap(findButton(t, p.root, "Check Again"))
+	if rec.detects != 2 || rec.refreshes != 1 {
+		t.Fatalf("detecciones=%d refrescos=%d", rec.detects, rec.refreshes)
+	}
+	if p.setupCard.Subtitle != "Folding@home Is Not Running" || p.setupCmdBox.Visible() ||
+		!strings.Contains(p.setupDesc.Text, "127.0.0.1:7396") {
+		t.Fatalf("tras instalar: %q / cmd visible=%v", p.setupCard.Subtitle, p.setupCmdBox.Visible())
+	}
+}
+
+// findButton returns the button labelled text under root.
+func findButton(t *testing.T, root fyne.CanvasObject, text string) *widget.Button {
+	t.Helper()
+	var walk func(o fyne.CanvasObject) *widget.Button
+	walk = func(o fyne.CanvasObject) *widget.Button {
+		switch w := o.(type) {
+		case *widget.Button:
+			if w.Text == text {
+				return w
+			}
+		case *fyne.Container:
+			for _, c := range w.Objects {
+				if b := walk(c); b != nil {
+					return b
+				}
+			}
+		case *widget.Card:
+			return walk(w.Content)
+		case *container.Scroll:
+			return walk(w.Content)
+		}
+		return nil
+	}
+	b := walk(root)
+	if b == nil {
+		t.Fatalf("no hay botón %q", text)
+	}
+	return b
 }

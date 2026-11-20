@@ -250,6 +250,12 @@ func (c *Controller) act(ctx context.Context, cmd string, args any, okMsg string
 	}
 }
 
+// Notify shows msg in the view's message, as the outcome of something the
+// UI did by itself (copying to the clipboard).
+func (c *Controller) Notify(msg string) {
+	c.setMessage(msg, false)
+}
+
 func (c *Controller) setMessage(msg string, isErr bool) {
 	c.update(func(v *View) {
 		v.Message, v.MessageIsError, v.MessageAt = msg, isErr, time.Now()
