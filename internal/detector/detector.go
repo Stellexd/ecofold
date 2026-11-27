@@ -303,6 +303,39 @@ type SystemSnapshot struct {
 	RecommendedCPUs int
 }
 
+// LoadCause is what made a load tick count as load. The empty value means no
+// load pause is in effect.
+type LoadCause string
+
+const (
+	// CausePauseList is a running process that matches the user's pause list.
+	CausePauseList LoadCause = "pause_list"
+	// CauseGame is a process above the load thresholds that belongs to a game
+	// session (a Steam launch or a Wine/Proton .exe, Linux layer 2).
+	CauseGame LoadCause = "game"
+	// CauseCompute is a compute process contending with Folding@home (Linux).
+	CauseCompute LoadCause = "compute"
+	// CauseGPULoad is any other load above the thresholds: a process outside a
+	// game session, or the device-wide figures on macOS.
+	CauseGPULoad LoadCause = "gpu_load"
+)
+
+// Detail explains the last Evaluate call. It is what the state alone cannot
+// say: why a load pause started and how long its cooldown still runs.
+type Detail struct {
+	// LoadCause is the cause of the latest load tick of the current load
+	// pause, kept through its cooldown; empty while no load pause is latched.
+	LoadCause LoadCause
+	// LoadCooldownTicksLeft is how many load-free ticks are still needed to
+	// end the load pause. It is 0 while load is seen, while a held game
+	// session is still running (the cooldown has not started) and when no
+	// load pause is latched.
+	LoadCooldownTicksLeft int
+	// ThermalCooldownTicksLeft is the same for a thermal pause: the ticks
+	// below the pause level still needed, 0 while the level is at or above it.
+	ThermalCooldownTicksLeft int
+}
+
 // GPUAppUsage is one app's share of the GPU between two ticks (macOS).
 type GPUAppUsage struct {
 	PID  uint32
@@ -332,7 +365,12 @@ type Evaluator struct {
 	// with an SM sample above 0 from a compute process.
 	tick        uint64
 	computeSeen map[uint32]uint64
-	cfg         Config
+	// loadCause is the cause of the latest load tick while a streak or a
+	// pause is latched; lastHigh records whether the last tick was a load
+	// tick.
+	loadCause LoadCause
+	lastHigh  bool
+	cfg       Config
 }
 
 // maxHeldSessions bounds heldSessions. Only sessions with a process above the
@@ -420,11 +458,13 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	defer e.mu.Unlock()
 
 	batteryPause := s.HasBattery && !s.OnAC && (!e.cfg.AllowBatteryFolding || s.BatteryPct < e.cfg.MinBatteryPct)
-	isHighLoad, sessions := e.isHighLoad(s)
+	isHighLoad, sessions, cause := e.isHighLoad(s)
 	thermalPause := e.thermalHeld(s.ThermalLevel, ThermalPauseLevel(s.MacProfile))
+	e.lastHigh = isHighLoad
 
 	switch {
 	case isHighLoad:
+		e.loadCause = cause
 		e.lowLoadStreak = 0
 		if e.highLoadStreak < e.cfg.SustainedTicksRequired {
 			e.highLoadStreak++
@@ -445,11 +485,13 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 		if e.lowLoadStreak >= e.cfg.CooldownTicksRequired {
 			e.loadPaused = false
 			e.lowLoadStreak = 0
+			e.loadCause = ""
 		}
 	default:
 		e.highLoadStreak = 0
 		e.lowLoadStreak = 0
 		e.heldSessions = nil
+		e.loadCause = ""
 	}
 
 	if e.loadPaused {
@@ -478,6 +520,24 @@ func (e *Evaluator) Evaluate(s SystemSnapshot) OperatingState {
 	return StateFolding
 }
 
+// Detail explains the last Evaluate call; see Detail. It is safe for
+// concurrent use.
+func (e *Evaluator) Detail() Detail {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var d Detail
+	if e.loadPaused {
+		d.LoadCause = e.loadCause
+		if !e.lastHigh && e.lowLoadStreak > 0 {
+			d.LoadCooldownTicksLeft = e.cfg.CooldownTicksRequired - e.lowLoadStreak
+		}
+	}
+	if e.thermalPaused && e.coolStreak > 0 {
+		d.ThermalCooldownTicksLeft = e.cfg.CooldownTicksRequired - e.coolStreak
+	}
+	return d
+}
+
 // thermalHeld updates the thermal latch with this tick's level and reports
 // whether folding must stay paused for it; pauseLevel is the lowest level
 // that pauses. It must be called with e.mu held.
@@ -497,30 +557,45 @@ func (e *Evaluator) thermalHeld(level, pauseLevel int) bool {
 }
 
 // isHighLoad reports whether the snapshot shows sustained-capable game load and
-// returns the game sessions of the processes that counted as load.
+// returns the game sessions of the processes that counted as load, and the
+// cause. When several causes meet in one tick the first of pause list, game,
+// compute and GPU load wins: the user's explicit list first, then the most
+// specific reason.
 // When GPUProcesses is non-nil the global device fields are ignored: the
 // collector is responsible for per-process attribution and device-wide metrics
 // are contaminated by Folding@home. When GPUProcesses is nil the macOS/global
 // path is used. It must be called with e.mu held.
-func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string) {
+func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string, LoadCause) {
 	cfg := e.cfg
 	e.tick++
-	high := len(s.UserPauseMatches) > 0
+	var cause LoadCause
+	if len(s.UserPauseMatches) > 0 {
+		cause = CausePauseList
+	}
 	if s.GPUProcesses != nil {
 		var sessions []string
+		var game, compute, load bool
 		seen := make(map[uint32]bool, len(s.GPUProcesses))
 		for _, proc := range s.GPUProcesses {
 			if !proc.SMUtilValid {
 				continue
 			}
-			if proc.SMUtilPct >= cfg.GPUUtilThresholdPct ||
+			overThresholds := proc.SMUtilPct >= cfg.GPUUtilThresholdPct ||
 				(proc.UsedVRAMMiB >= uint64(cfg.GPUMemThresholdMiB) &&
-					proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct) ||
-				e.computeContending(proc, s.ProcessCPUPct[proc.PID], seen) {
-				high = true
-				if key, ok := s.GPUProcessSessions[proc.PID]; ok {
-					sessions = append(sessions, key)
-				}
+					proc.SMUtilPct >= cfg.GPUMemRequiresUtilPct)
+			// Short-circuit as before: computeContending records activity only
+			// for processes below the thresholds.
+			contending := !overThresholds && e.computeContending(proc, s.ProcessCPUPct[proc.PID], seen)
+			if !overThresholds && !contending {
+				continue
+			}
+			if key, ok := s.GPUProcessSessions[proc.PID]; ok {
+				sessions = append(sessions, key)
+				game = true
+			} else if overThresholds {
+				load = true
+			} else {
+				compute = true
 			}
 		}
 		for pid := range e.computeSeen {
@@ -528,14 +603,26 @@ func (e *Evaluator) isHighLoad(s SystemSnapshot) (bool, []string) {
 				delete(e.computeSeen, pid)
 			}
 		}
-		return high, sessions
+		switch {
+		case cause != "":
+		case game:
+			cause = CauseGame
+		case compute:
+			cause = CauseCompute
+		case load:
+			cause = CauseGPULoad
+		}
+		return cause != "", sessions, cause
 	}
-	if high {
-		return true, nil
+	if cause != "" {
+		return true, nil, cause
 	}
-	return s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
+	if s.GPUDeviceUtilPct >= cfg.GPUUtilThresholdPct ||
 		(s.GPUInUseMemMiB >= cfg.GPUMemThresholdMiB &&
-			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct), nil
+			s.GPUDeviceUtilPct >= cfg.GPUMemRequiresUtilPct) {
+		return true, nil, CauseGPULoad
+	}
+	return false, nil, ""
 }
 
 // computeContending reports whether proc is compute work held back by the FAH
