@@ -163,6 +163,11 @@ func (v View) ModeLabel() string {
 		}
 		return "Folding"
 	case ModePausedLoad:
+		// paused_load covers games, GPU load and the user's pause list; only
+		// a pause list match can be told apart from the status.
+		if len(v.Status.PauseMatches) > 0 {
+			return "Paused (Program)"
+		}
 		return "Paused (Game)"
 	case ModePausedBattery:
 		return "Paused (Battery)"
@@ -230,6 +235,9 @@ func (v View) ResumeHint() string {
 	s := v.Status
 	switch s.Mode {
 	case ModePausedLoad:
+		if m := s.PauseMatches; len(m) > 0 {
+			return "Running from your pause list: " + strings.Join(m, ", ") + ". Folding resumes by itself after the cooldown once it quits."
+		}
 		return "A game or a heavy GPU app is running. Folding resumes by itself after the cooldown."
 	case ModePausedBattery:
 		return "The battery is too low to fold. Folding resumes when you plug in or the battery allows it."
