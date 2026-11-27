@@ -38,7 +38,8 @@ checked; first-run FAH setup requested).
 
 ### To close M3 (issue #3)
 
-- [ ] Try the GUI on the CachyOS desktop (checklist in section 3).
+- [x] Try the GUI on the CachyOS desktop (checklist in section 3; done
+  2026-11-27).
 - [x] Run the M4 Air with FAH folding on the 1-thread CPU budget and watch
   the temperature (item 0).
 - [x] macOS pause list on AC: folding resumes 2 minutes after the matching
@@ -213,7 +214,18 @@ always stop folding.
     turned blue and the disabled Resume explained the game. After the game
     quit, the cooldown ended at 06:07:42.516: 123 W again and FAH resumed
     0.8 s later.
-  - [ ] Against the real daemon: the pause list.
+  - [x] Against the real daemon: the pause list (2026-11-27, `kcalc`).
+    Saved from the panel: the daemon paused at 06:11:22 (145 W, FAH paused
+    1.2 s later) and resumed 2 minutes after KCalc quit. The header said
+    "Paused (Game)" for it, because `paused_load` did not carry its cause.
+    Fixed by publishing `load_cause` and `cooldown_s` (`internal/ipc/README.md`):
+    rerun with the new daemon at 06:31:54, the header read "Paused (Program:
+    kcalc)", then "Resuming in m:ss (Program)" counting down from 114 s with
+    `load_cause` kept as `pause_list`; folding resumed at 06:35:24 (123 W
+    21 ms later, FAH 0.6 s later).
+  - [ ] A first entry box mistake (`kcal` saved instead of `kcalc`) was
+    probably a typo; watch for a lost last keystroke in the Fyne entry on
+    Wayland.
 - [x] **GUI showed misleading data** (seen on the real window on a MacBook Air
   M4, 2026-11-16). Fixed 2026-11-17 in
   `fix(gui,daemon): report real fah status and accurate macos gpu telemetry`.
