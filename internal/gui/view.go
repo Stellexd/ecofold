@@ -60,6 +60,11 @@ type Status struct {
 	PauseListSupported bool     `json:"pause_list_supported"`
 	PauseProcesses     []string `json:"pause_processes"`
 	PauseMatches       []string `json:"pause_matches"`
+	// LoadCause is why a paused_load pause started ("pause_list", "game",
+	// "compute", "gpu_load"), kept through the cooldown; CooldownS is the time
+	// left before a load or thermal pause ends. An older daemon sends neither.
+	LoadCause string `json:"load_cause"`
+	CooldownS int    `json:"cooldown_s"`
 	// MacProfile and RecommendedCPUs describe how the daemon limits FAH's
 	// CPU threads on macOS; empty and 0 on Linux.
 	MacProfile      string `json:"mac_profile"`
@@ -82,6 +87,12 @@ const (
 	ModeDegraded      = "degraded"
 
 	OverridePause = "pause"
+
+	// Load causes, as they appear in Status.LoadCause.
+	CausePauseList = "pause_list"
+	CauseGame      = "game"
+	CauseCompute   = "compute"
+	CauseGPULoad   = "gpu_load"
 
 	// FAHStateIdle is Status.FAH.State when FAH is not paused but no work
 	// unit is running.
@@ -163,15 +174,20 @@ func (v View) ModeLabel() string {
 		}
 		return "Folding"
 	case ModePausedLoad:
-		// paused_load covers games, GPU load and the user's pause list; only
-		// a pause list match can be told apart from the status.
-		if len(v.Status.PauseMatches) > 0 {
-			return "Paused (Program)"
+		cause := v.loadCauseLabel()
+		if v.Status.CooldownS > 0 {
+			return fmt.Sprintf("Resuming in %s (%s)", clock(v.Status.CooldownS), cause)
 		}
-		return "Paused (Game)"
+		if v.loadCause() == CausePauseList && len(v.Status.PauseMatches) > 0 {
+			return fmt.Sprintf("Paused (%s: %s)", cause, strings.Join(v.Status.PauseMatches, ", "))
+		}
+		return "Paused (" + cause + ")"
 	case ModePausedBattery:
 		return "Paused (Battery)"
 	case ModePausedThermal:
+		if v.Status.CooldownS > 0 {
+			return fmt.Sprintf("Resuming in %s (Thermal)", clock(v.Status.CooldownS))
+		}
 		return "Paused (Thermal)"
 	case ModePausedManual:
 		return "Paused (Manual)"
@@ -182,6 +198,37 @@ func (v View) ModeLabel() string {
 	default:
 		return v.Status.Mode
 	}
+}
+
+// loadCause is Status.LoadCause, or for an older daemon that does not send
+// it, the best guess from the live pause list matches.
+func (v View) loadCause() string {
+	if c := v.Status.LoadCause; c != "" {
+		return c
+	}
+	if len(v.Status.PauseMatches) > 0 {
+		return CausePauseList
+	}
+	return CauseGame
+}
+
+// loadCauseLabel is the cause of a load pause in words.
+func (v View) loadCauseLabel() string {
+	switch v.loadCause() {
+	case CausePauseList:
+		return "Program"
+	case CauseCompute:
+		return "GPU Compute"
+	case CauseGPULoad:
+		return "GPU Load"
+	default:
+		return "Game"
+	}
+}
+
+// clock formats seconds as m:ss.
+func clock(secs int) string {
+	return fmt.Sprintf("%d:%02d", secs/60, secs%60)
 }
 
 // Headline is the one-line summary for the tray menu, for example
@@ -235,8 +282,25 @@ func (v View) ResumeHint() string {
 	s := v.Status
 	switch s.Mode {
 	case ModePausedLoad:
-		if m := s.PauseMatches; len(m) > 0 {
-			return "Running from your pause list: " + strings.Join(m, ", ") + ". Folding resumes by itself after the cooldown once it quits."
+		if s.CooldownS > 0 {
+			return fmt.Sprintf("Waiting out the cooldown after the %s. Folding resumes by itself in %s.",
+				strings.ToLower(v.loadCauseLabel()), clock(s.CooldownS))
+		}
+		// Without load_cause (an older daemon) only a pause list match is
+		// certain; the rest gets the generic text below.
+		switch v.loadCause() {
+		case CausePauseList:
+			if m := s.PauseMatches; len(m) > 0 {
+				return "Running from your pause list: " + strings.Join(m, ", ") + ". Folding resumes by itself after the cooldown once it quits."
+			}
+			return "A program from your pause list is running. Folding resumes by itself after the cooldown once it quits."
+		case CauseGame:
+			if s.LoadCause == "" {
+				break
+			}
+			return "A game is running. Folding resumes by itself after the cooldown once it quits."
+		case CauseCompute:
+			return "Another app is computing on the GPU. Folding resumes by itself after the cooldown."
 		}
 		return "A game or a heavy GPU app is running. Folding resumes by itself after the cooldown."
 	case ModePausedBattery:
