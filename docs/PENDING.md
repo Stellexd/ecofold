@@ -6,7 +6,8 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-20 (macOS hardware checks done).
+Last updated: 2026-11-27 (CachyOS reinstalled; unit without the group
+checked; first-run FAH setup requested).
 
 > **Warning:** EcoFold is not recommended at all on computers without
 > active cooling (fanless laptops such as the MacBook Air). Even with the
@@ -37,13 +38,15 @@ Last updated: 2026-11-20 (macOS hardware checks done).
 
 ### To close M3 (issue #3)
 
-- [ ] Try the GUI on the CachyOS desktop (checklist in section 3).
+- [x] Try the GUI on the CachyOS desktop (checklist in section 3; done
+  2026-11-27).
 - [x] Run the M4 Air with FAH folding on the 1-thread CPU budget and watch
   the temperature (item 0).
 - [x] macOS pause list on AC: folding resumes 2 minutes after the matching
   app quits (checked on battery and on AC).
-- [ ] Start the unit without the `ecofold` group: it must start, log
-  `socket group not found` and leave the socket `0600`.
+- [x] Start the unit without the `ecofold` group: it must start, log
+  `socket group not found` and leave the socket `0600` (CachyOS,
+  2026-11-27).
 - [x] Security review of the socket (2026-11-20, focused review with the
   `security-audit` skill; `SECURITY_AUDIT.md` section 8): no findings.
 
@@ -134,9 +137,14 @@ always stop folding.
   command against the real NVML and FAH, an unauthorized uid refused with no
   response, and `systemctl stop` removing the socket and restoring 145 W. The
   unit needed `CAP_CHOWN`; the `ExecStartPre` approach did not work.
-- [ ] Start the unit without the `ecofold` group (`groupdel ecofold`): it must
-  still start, log `socket group not found` and leave the socket `0600`. Only
-  a unit test covers this today.
+- [x] Start the unit without the `ecofold` group: it must still start, log
+  `socket group not found` and leave the socket `0600`. Checked on CachyOS on
+  2026-11-27 (fresh install, unit from `0e1ea6e`, group not created yet): the
+  daemon logged `ipc: socket group not found; the socket is restricted to
+  root`, kept running, applied 123 W and left `/run/ecofold` `750 root:root`
+  and the socket `600 root:root`. After `groupadd ecofold`, adding the user
+  and a restart: `750 root:ecofold` and `660 root:ecofold`, and the user's
+  `status` request over the socket answered.
 - [ ] IPC changes are not persisted: `set_eco_watts` and
   `set_pause_processes` are lost when the daemon restarts (the flags apply
   again); the manual pause is kept through the marker since 2026-11-18. Decide where a config file lives and who may write it before the
@@ -195,14 +203,29 @@ always stop folding.
   - [x] KDE Plasma (Wayland), 2026-11-17: the tray icon appears, the menu
     works, the window's X hides it instead of quitting, and Pause Folding
     turns the icon gray, pauses FAH and restores 145 W.
-  - [ ] KDE Plasma: the icon turns blue during a game.
+  - [x] KDE Plasma: the icon turns blue during a game (Deadlock, 2026-11-27).
   - [x] macOS: the menu bar icon and menu, and the control panel with the
     power control hidden and the pause list disabled.
-  - [ ] Against the real daemon: resume (also during a game, to see the
-    `game_active` message), the eco limit applied while folding and the
-    pause list. On 2026-11-17 the eco limit was set to 130 W during a manual
-    pause: the daemon accepted it and correctly kept 145 W, so the applied
-    cap was not seen.
+  - [x] Against the real daemon, 2026-11-27 (unit from `0e1ea6e`, FAH v8 in
+    Docker folding project 18258 on the GPU): 123 W applied while folding
+    (121 W drawn at 100 % GPU). Deadlock started: `folding` → `paused_load`
+    at 05:58:06.520 with the Steam session `steam:1422450`, 145 W restored
+    5 ms later and FAH confirmed paused 1.15 s after detection. The icon
+    turned blue and the disabled Resume explained the game. After the game
+    quit, the cooldown ended at 06:07:42.516: 123 W again and FAH resumed
+    0.8 s later.
+  - [x] Against the real daemon: the pause list (2026-11-27, `kcalc`).
+    Saved from the panel: the daemon paused at 06:11:22 (145 W, FAH paused
+    1.2 s later) and resumed 2 minutes after KCalc quit. The header said
+    "Paused (Game)" for it, because `paused_load` did not carry its cause.
+    Fixed by publishing `load_cause` and `cooldown_s` (`internal/ipc/README.md`):
+    rerun with the new daemon at 06:31:54, the header read "Paused (Program:
+    kcalc)", then "Resuming in m:ss (Program)" counting down from 114 s with
+    `load_cause` kept as `pause_list`; folding resumed at 06:35:24 (123 W
+    21 ms later, FAH 0.6 s later).
+  - [ ] A first entry box mistake (`kcal` saved instead of `kcalc`) was
+    probably a typo; watch for a lost last keystroke in the Fyne entry on
+    Wayland.
 - [x] **GUI showed misleading data** (seen on the real window on a MacBook Air
   M4, 2026-11-16). Fixed 2026-11-17 in
   `fix(gui,daemon): report real fah status and accurate macos gpu telemetry`.
@@ -298,6 +321,34 @@ always stop folding.
 - [ ] README with install, permissions and known limitations.
 - [ ] Tag `v0.1.0` on `main` once every box above is ticked.
 
+### 5. First-run Folding@home setup (requested 2026-11-27, not decided)
+
+On the fresh CachyOS install, FAH did not fold until the user did three
+things by hand in the web app: link the machine and press Fold, enable the
+GPU (`gpu:01:00:00`), and set the CPU to 0 cores. The user wants EcoFold to
+do this automatically. It conflicts with the M4 rule "FAH is installed
+separately, never bundled"; decide and record it in `docs/DECISIONES.md`
+before building it.
+
+- [ ] **Start folding without manual steps.** When FAH answers but has never
+  been configured (no GPU enabled, or paused since install), EcoFold offers
+  to start: enable the NVIDIA GPU and send `fold` through the v8 API.
+  Proposal: the GUI asks once (a "Start folding" button in the setup card)
+  instead of the daemon overriding what the user left in FAH. Check the v8
+  config fields for GPUs and resource groups in the client source first.
+- [ ] **GPU-only folding by default on Linux.** Set FAH's CPU cores to 0
+  when EcoFold manages a GPU, so FAH does not take CPU from games. Record the
+  user's value and restore it on exit, like the macOS `cpus` budget does
+  (and the same open item: persist the original value). Note: after the user
+  set 0 cores in the web app, the daemon status still reported `cpus: 11`;
+  check which field the web app changes (global `cpus` vs. the resource
+  group's).
+- [ ] **Download and install FAH automatically.** Riskier: it fetches and
+  runs a third-party binary with privileges. Linux: make it a dependency of
+  the AUR package instead of an optdepend. macOS: see whether the official
+  signed installer can be fetched and verified. Docker: the GUI already
+  offers a loopback-only `docker run` command to copy.
+
 ## Open risks
 
 - [ ] **R5 CPU-only renders pause folding.** An app with a CUDA context that
@@ -336,14 +387,18 @@ always stop folding.
 
 ## Housekeeping
 
-- [ ] Publish the FAH container on `127.0.0.1:7396:7396` instead of
-  `0.0.0.0:7396`: today any host on the LAN can pause or reconfigure FAH.
-- [ ] CachyOS test machine: the installed `/usr/bin/ecofold-daemon` and its
-  unit are a manual build of `feat/m3-ipc-socket` at `933170e`, and the
-  `ecofold` group exists with the desktop user in it. Reinstall with
-  `sudo bash ~/.cache/ecofold-verify/m3/m3-verify.sh` (it also reruns the IPC
-  checks) after daemon changes until the AUR package exists; the AUR package
-  must create the group (`sysusers.d`). The legacy `autofold.service` (user unit) is
-  disabled. The old local branch `test/m1-nvml-integration` in
-  `~/Documents/GitHub/ecofoldGPU` only holds a commit already applied on
-  `develop`; delete it with `git branch -D` when convenient.
+- [x] Publish the FAH container on `127.0.0.1:7396:7396` instead of
+  `0.0.0.0:7396` (done on the CachyOS reinstall, 2026-11-27).
+- [ ] CachyOS test machine, reinstalled around 2026-11-26 (user `benjamin`).
+  Set up again on 2026-11-27: Go 1.27.4 from pacman, repo cloned at
+  `~/Documents/GitHub/ecofold` (`develop`, `0e1ea6e`), daemon installed by
+  hand to `/usr/bin/ecofold-daemon`, unit in
+  `/etc/systemd/system/ecofold-daemon.service`, `ecofold` group with the
+  user in it, and FAH v8 in Docker (`linuxserver/foldingathome:latest`,
+  `--gpus all` through `nvidia-container-toolkit`, `-p 127.0.0.1:7396:7396`,
+  config in `~/fah-config`). The old `m3-verify.sh` and the calibration
+  sampler in `~/.cache/ecofold-verify` were lost; rebuild the sampler before
+  the M2 app matrix. After daemon changes: `make build`, then
+  `sudo install -m 755 bin/ecofold-daemon /usr/bin/ecofold-daemon` and
+  `sudo systemctl restart ecofold-daemon`. The AUR package must create the
+  group (`sysusers.d`).

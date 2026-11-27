@@ -119,6 +119,16 @@ type Status struct {
 	PauseProcesses []string `json:"pause_processes"`
 	PauseMatches   []string `json:"pause_matches"`
 
+	// LoadCause says what caused a paused_load pause: "pause_list", "game",
+	// "compute" or "gpu_load". It is kept through the cooldown, after the
+	// cause is gone, and is empty in every other mode.
+	LoadCause string `json:"load_cause"`
+	// CooldownS is the time left, in seconds, before a paused_load or
+	// paused_thermal pause ends if nothing new happens. It is 0 while the
+	// cause is still present (load seen, the game still running, the
+	// pressure still high) and in every other mode.
+	CooldownS int `json:"cooldown_s"`
+
 	// MacProfile is the Mac's cooling class ("fanless", "active_laptop",
 	// "desktop"); empty on Linux. RecommendedCPUs is the CPU thread budget
 	// for Folding@home from the last snapshot; 0 means the daemon leaves
@@ -213,6 +223,14 @@ func (d *Daemon) publish() Status {
 		}
 	}
 	d.gpuStatus.UtilPct, d.gpuStatus.InUseMemMiB = d.gpuUtilPct, d.gpuInUseMemMiB
+	var loadCause string
+	var cooldownTicks int
+	switch d.mode {
+	case ModePausedLoad:
+		loadCause, cooldownTicks = string(d.detail.LoadCause), d.detail.LoadCooldownTicksLeft
+	case ModePausedThermal:
+		cooldownTicks = d.detail.ThermalCooldownTicksLeft
+	}
 	st := Status{
 		Mode:                d.mode,
 		ManualOverride:      d.manual,
@@ -234,6 +252,8 @@ func (d *Daemon) publish() Status {
 		PauseListSupported:  d.pauseListSupported(),
 		PauseProcesses:      d.pauseProcesses,
 		PauseMatches:        d.pauseMatches,
+		LoadCause:           loadCause,
+		CooldownS:           int(time.Duration(cooldownTicks) * d.cfg.Tick / time.Second),
 		MacProfile:          string(d.macProfile),
 		RecommendedCPUs:     d.recommendedCPUs,
 		FoldingSeconds:      int64(d.foldingTime / time.Second),

@@ -36,6 +36,13 @@ type Evaluator interface {
 	Evaluate(detector.SystemSnapshot) detector.OperatingState
 }
 
+// Explainer is optionally implemented by an Evaluator to say why it paused
+// and how long the cooldown still runs. *detector.Evaluator implements it;
+// without it the status leaves load_cause and cooldown_s empty.
+type Explainer interface {
+	Detail() detector.Detail
+}
+
 // Mode is the daemon's externally visible state.
 type Mode string
 
@@ -195,6 +202,8 @@ type Daemon struct {
 	gpuInUseMemMiB int
 	sessions       []string
 	pauseMatches   []string
+	// detail is the evaluator's explanation of the last decision.
+	detail detector.Detail
 
 	// macProfile and recommendedCPUs come from the last snapshot (macOS).
 	macProfile      detector.MacThermalProfile
@@ -461,7 +470,11 @@ func (d *Daemon) tick(ctx context.Context) {
 		d.log.Debug("gpu apps", "device_util_pct", snap.GPUDeviceUtilPct, "apps", formatGPUApps(snap.GPUApps))
 	}
 
-	d.apply(ctx, d.eval.Evaluate(snap))
+	decision := d.eval.Evaluate(snap)
+	if x, ok := d.eval.(Explainer); ok {
+		d.detail = x.Detail()
+	}
+	d.apply(ctx, decision)
 }
 
 // apply drives the GPU and FAH towards decision. Power is changed first in
