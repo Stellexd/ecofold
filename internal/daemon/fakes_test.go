@@ -270,6 +270,8 @@ func (e *countingEvaluator) Evaluate(s detector.SystemSnapshot) detector.Operati
 	return e.inner.Evaluate(s)
 }
 
+func (e *countingEvaluator) Detail() detector.Detail { return e.inner.Detail() }
+
 func (e *countingEvaluator) count() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()

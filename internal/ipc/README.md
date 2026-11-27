@@ -196,6 +196,8 @@ again.
   "pause_list_supported": true,
   "pause_processes": ["blender"],
   "pause_matches": [],
+  "load_cause": "",
+  "cooldown_s": 0,
   "mac_profile": "",
   "recommended_cpus": 0,
   "folding_seconds": 5025,
@@ -221,6 +223,16 @@ again.
 - `startup_hold`: `paused_by_us` is a pause inherited from the previous run
   that the startup hold still keeps (one cooldown after the daemon starts).
   A client can say "starting" instead of "resuming".
+- `load_cause`: why a `paused_load` pause started, kept through its cooldown
+  after the cause is gone: `pause_list` (a process matches the pause list),
+  `game` (load from a process of a game session), `compute` (a compute app
+  contending with FAH) or `gpu_load` (any other load above the thresholds).
+  When several meet in one tick the first in that order wins. Empty in every
+  other mode.
+- `cooldown_s`: seconds left before a `paused_load` or `paused_thermal`
+  pause ends if nothing new happens. 0 while the cause is still present (load
+  seen, the game's session still running, the pressure still high) and in
+  every other mode. It moves in steps of one tick (2 s).
 - `pause_list_supported`: false where `set_pause_processes` answers
   `unsupported` (a collector without a process view), so a client can disable
   the control up front. It is true on Linux and macOS.
