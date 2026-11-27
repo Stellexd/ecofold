@@ -202,14 +202,18 @@ always stop folding.
   - [x] KDE Plasma (Wayland), 2026-11-17: the tray icon appears, the menu
     works, the window's X hides it instead of quitting, and Pause Folding
     turns the icon gray, pauses FAH and restores 145 W.
-  - [ ] KDE Plasma: the icon turns blue during a game.
+  - [x] KDE Plasma: the icon turns blue during a game (Deadlock, 2026-11-27).
   - [x] macOS: the menu bar icon and menu, and the control panel with the
     power control hidden and the pause list disabled.
-  - [ ] Against the real daemon: resume (also during a game, to see the
-    `game_active` message), the eco limit applied while folding and the
-    pause list. On 2026-11-17 the eco limit was set to 130 W during a manual
-    pause: the daemon accepted it and correctly kept 145 W, so the applied
-    cap was not seen.
+  - [x] Against the real daemon, 2026-11-27 (unit from `0e1ea6e`, FAH v8 in
+    Docker folding project 18258 on the GPU): 123 W applied while folding
+    (121 W drawn at 100 % GPU). Deadlock started: `folding` → `paused_load`
+    at 05:58:06.520 with the Steam session `steam:1422450`, 145 W restored
+    5 ms later and FAH confirmed paused 1.15 s after detection. The icon
+    turned blue and the disabled Resume explained the game. After the game
+    quit, the cooldown ended at 06:07:42.516: 123 W again and FAH resumed
+    0.8 s later.
+  - [ ] Against the real daemon: the pause list.
 - [x] **GUI showed misleading data** (seen on the real window on a MacBook Air
   M4, 2026-11-16). Fixed 2026-11-17 in
   `fix(gui,daemon): report real fah status and accurate macos gpu telemetry`.
