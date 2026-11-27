@@ -2,13 +2,15 @@ package detector
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
 // The pause list is the user's choice of apps that must stop folding while
 // they run, whatever their GPU use. Patterns use the ignore-list syntax:
-// case-insensitive exact names, or a prefix with a trailing "*", matched
-// against /proc/<pid>/comm and basename(argv[0]).
+// case-insensitive exact names, or a prefix with a trailing "*". Linux matches
+// them against /proc/<pid>/comm and basename(argv[0]); macOS against p_comm
+// and, when p_comm may be truncated, the executable name.
 
 const (
 	maxPausePatterns   = 64
@@ -77,4 +79,30 @@ func matchPattern(patterns []string, name string) bool {
 		}
 	}
 	return false
+}
+
+// addPauseMatch records name, lowercased, in found when it matches patterns
+// and is not a Folding@home process. It reports whether name matched
+// patterns, so the caller can stop trying other names of the same process.
+func addPauseMatch(found map[string]bool, patterns []string, name string) bool {
+	if !matchPattern(patterns, name) {
+		return false
+	}
+	if !matchPattern(foldingProcesses, name) {
+		found[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+	return true
+}
+
+// sortedMatches returns the names in found, sorted, or nil when it is empty.
+func sortedMatches(found map[string]bool) []string {
+	if len(found) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(found))
+	for name := range found {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }

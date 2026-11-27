@@ -380,6 +380,28 @@ func TestEcoWattsRangeIsCheckedLocally(t *testing.T) {
 	}
 }
 
+// TestNotify: a note from the UI reaches the view's message without a
+// request to the daemon.
+func TestNotify(t *testing.T) {
+	path := socketPath(t)
+	d := newFakeDaemon()
+	startDaemon(t, path, d)
+	var seen []string
+	c := New(Config{SocketPath: path, OnChange: func(v View) { seen = append(seen, v.Message) }})
+	c.Refresh(bg)
+
+	c.Notify("Install command copied to clipboard")
+	if v := c.View(); v.MessageIsError || v.Message != "Install command copied to clipboard" || v.MessageAt.IsZero() {
+		t.Fatalf("mensaje = %q (error=%v)", v.Message, v.MessageIsError)
+	}
+	if len(seen) == 0 || seen[len(seen)-1] != "Install command copied to clipboard" {
+		t.Fatalf("OnChange no recibió el aviso: %q", seen)
+	}
+	if got := d.commands(); len(got) != 0 {
+		t.Fatalf("Notify envió %d comandos", len(got))
+	}
+}
+
 // TestAccessDenied covers both ways the daemon keeps a user out: the socket
 // file's mode, and hanging up on a peer it does not authorize.
 func TestAccessDenied(t *testing.T) {
@@ -808,5 +830,48 @@ func TestIcons(t *testing.T) {
 		if &IconPNG(tone)[0] != &raw[0] {
 			t.Errorf("%s: el ícono no está en caché", tone.Name())
 		}
+	}
+}
+
+// TestButtonHints: each button is enabled exactly when it can act, and says
+// why otherwise.
+func TestButtonHints(t *testing.T) {
+	mk := func(mode string, edit func(*Status)) View {
+		v := View{Connected: true}
+		v.Status.Mode, v.Status.ManualOverride = mode, "none"
+		v.Status.FAH.Reachable, v.Status.FAH.ObservedAt, v.Status.FAH.State = true, time.Now(), "folding"
+		if edit != nil {
+			edit(&v.Status)
+		}
+		return v
+	}
+	cases := []struct {
+		name          string
+		v             View
+		pause, resume string // "" means enabled; otherwise a fragment of the hint
+	}{
+		{"sin daemon", View{}, "Not connected", "Not connected"},
+		{"plegando", mk(ModeFolding, nil), "", "already running"},
+		{"plegando con batería", mk(ModeFoldingEco, nil), "", "already running"},
+		{"esperando unidad", mk(ModeFolding, func(s *Status) { s.FAH.State = FAHStateIdle }), "", "waiting for a work unit"},
+		{"pausa manual", mk(ModePausedManual, func(s *Status) { s.ManualOverride = OverridePause; s.FAH.Paused = true }),
+			"already paused by you", ""},
+		{"manual durante un juego", mk(ModePausedLoad, func(s *Status) { s.ManualOverride = OverridePause }),
+			"already paused by you", ""},
+		{"juego", mk(ModePausedLoad, nil), "", "cooldown"},
+		{"batería baja", mk(ModePausedBattery, nil), "", "battery is too low"},
+		{"térmica", mk(ModePausedThermal, nil), "", "too hot"},
+		{"pausa del usuario en FAH", mk(ModeFolding, func(s *Status) { s.FAH.Paused = true }), "", ""},
+		{"EcoFold reanudando (salta la espera)", mk(ModeFolding, func(s *Status) { s.FAH.Paused, s.PausedByUs = true, true }), "", ""},
+		{"FAH caído", mk(ModeFolding, func(s *Status) { s.FAH.Reachable = false }), "", "not reachable"},
+	}
+	for _, c := range cases {
+		check := func(button, got, want string) {
+			if (want == "") != (got == "") || !strings.Contains(got, want) {
+				t.Errorf("%s: %s = %q, se esperaba %q", c.name, button, got, want)
+			}
+		}
+		check("pausa", c.v.PauseHint(), c.pause)
+		check("reanudar", c.v.ResumeHint(), c.resume)
 	}
 }

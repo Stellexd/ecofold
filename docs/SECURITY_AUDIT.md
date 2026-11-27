@@ -159,3 +159,57 @@ None of these has a lower-trust principal that controls the input today. They ar
 - No known-vulnerability scan of dependencies was run (`govulncheck` is not installed and network access was not used).
 - `nvidia_linux.go` was reviewed by reading only.
 - This quick run does not claim complete coverage. Rerun with the `standard` profile once Milestone 3 adds the daemon, IPC, and Wails GUI. Those components will be the real attack surface.
+
+## 8. IPC socket review (2026-11-20)
+
+Method: `security-audit` skill in guidance mode, a focused source review by
+one agent. It is not the full `standard` workflow: there were no delegated
+hunters, verifiers or coverage ledger, and no run artifacts. Existing tests
+were the only code run.
+
+| Item | Value |
+| --- | --- |
+| Source ref | `be42348` on `feat/m3-macos-process-detection`, clean worktree |
+| Scope | `internal/ipc` (server, protocol, peer credentials, paths on Linux and macOS), `internal/daemon/command.go`, `cmd/ecofold-daemon/ipc.go`, `deploy/systemd/ecofold-daemon.service` |
+| Out of scope | The GUI's other inputs (Folding@home project API), FAH WebSocket client, detectors |
+| Threat model | A local user outside root, the daemon's user and the `ecofold` group (Linux); any other local user (macOS). Members of `ecofold` are trusted to pause, resume, set the eco limit and the pause list. |
+
+**Result: no confirmed findings.** NV-1 (section 4) is resolved in code:
+
+- The socket lives in `/run/ecofold` (Linux) or the user's cache directory
+  (macOS), never in `/tmp`. The directory must be a real directory owned by
+  the daemon's user; it is set to `0750` (`0700` on macOS).
+- `bind(2)` runs under umask `0177`, so the socket is `0600` from creation;
+  it becomes `0660` only after its group really is `ecofold`. A missing
+  group leaves it `0600` (`resolveGroup`, fail-closed).
+- Only a dead socket is removed at startup; a live one is
+  `ErrAlreadyRunning`, and a symlink, file or directory is refused.
+- Peers are authenticated with `SO_PEERCRED` (Linux) or `LOCAL_PEERCRED`
+  (macOS) before any byte is read; a refused peer is closed without an
+  answer. Supplementary groups come from the user database with a 30 s
+  cache, so a user removed from `ecofold` loses access within 30 s.
+- Each message is capped at 64 KiB while it is read, one 2 s deadline covers
+  a whole message, connections are capped at 32, and a panic closes only its
+  connection.
+- Requests are strict JSON (unknown fields and trailing data rejected) with a
+  closed command list. Watts are checked against the NVML range without
+  clamping. Pause patterns are capped (64, bounded length), must be process
+  names, allow `*` only at the end, cannot match everything and cannot match
+  the Folding@home processes.
+- `force_resume` is refused during a game, battery or thermal pause.
+
+**Notes (not findings)**
+
+- I1: membership in `ecofold` is read from the user database, not from the
+  peer process's live groups. A same-uid process that dropped the group (a
+  sandbox) would pass if it could connect; today the `0750` directory stops
+  it before `connect(2)`.
+- I2: `pause_matches` can name processes of other users to a member of
+  `ecofold`. On Linux `/proc` already shows them unless `hidepid` is set.
+- I3: the unit hardening (`SystemCallFilter`, `ProtectKernelModules`,
+  `RestrictNamespaces`, `MemoryDenyWriteExecute`) is still open in
+  `docs/PENDING.md`.
+
+**Still to see on hardware:** the unit started without the `ecofold` group
+must log `socket group not found` and leave the socket `0600`. A unit test
+covers it; it has not been run on CachyOS.

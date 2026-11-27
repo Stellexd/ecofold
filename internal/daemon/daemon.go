@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -456,6 +457,9 @@ func (d *Daemon) tick(ctx context.Context) {
 	}
 	d.gpuUtilPct, d.gpuInUseMemMiB = snap.GPUDeviceUtilPct, snap.GPUInUseMemMiB
 	d.macProfile, d.recommendedCPUs = snap.MacProfile, snap.RecommendedCPUs
+	if len(snap.GPUApps) > 0 && d.log.Enabled(ctx, slog.LevelDebug) {
+		d.log.Debug("gpu apps", "device_util_pct", snap.GPUDeviceUtilPct, "apps", formatGPUApps(snap.GPUApps))
+	}
 
 	d.apply(ctx, d.eval.Evaluate(snap))
 }
@@ -739,4 +743,17 @@ func (d *Daemon) failSafe(loopHung bool) error {
 
 func isPause(s detector.OperatingState) bool {
 	return s == detector.StatePausedLoad || s == detector.StatePausedBattery || s == detector.StatePausedThermal
+}
+
+// formatGPUApps renders per-app GPU time for the -debug dump, for example
+// "Safari[812]=31% WindowServer[604]=4%".
+func formatGPUApps(apps []detector.GPUAppUsage) string {
+	var b strings.Builder
+	for i, a := range apps {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%s[%d]=%d%%", a.Name, a.PID, a.GPUTimePct)
+	}
+	return b.String()
 }

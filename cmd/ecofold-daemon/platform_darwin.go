@@ -20,8 +20,8 @@ func defaultRuntimeDir() string {
 }
 
 // pauseListSupported reports whether newCollector honors the pause list. The
-// macOS collector reads ioreg only and has no per-process view yet.
-const pauseListSupported = false
+// macOS collector lists processes with sysctl kern.proc.all.
+const pauseListSupported = true
 
 func newCollector(gpu.Provider) daemon.Collector {
 	return detector.NewDarwinCollector()

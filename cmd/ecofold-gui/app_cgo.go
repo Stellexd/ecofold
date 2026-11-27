@@ -65,6 +65,9 @@ func runUI(logger *slog.Logger, opts options) int {
 				logger.Warn("could not open the browser", "url", link, "err", err)
 			}
 		},
+		refresh:   func() { run(ctrl.Refresh) },
+		notify:    ctrl.Notify,
+		detectFAH: gui.DetectFAHInstallHere,
 	})
 	w.SetContent(p.root)
 

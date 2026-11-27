@@ -25,6 +25,12 @@ type actions struct {
 	setEcoWatts  func(watts int)
 	setPauseList func(text string)
 	openURL      func(url string)
+	// refresh asks the daemon for its status now; notify shows a message
+	// in the status bar. detectFAH looks for a Folding@home install on
+	// this system, without running anything.
+	refresh   func()
+	notify    func(msg string)
+	detectFAH func() gui.FAHInstallGuide
 }
 
 // Compute engines offered by the selector. Only Folding@home is wired; the
@@ -57,7 +63,6 @@ func newMetricTile() (metricTile, fyne.CanvasObject) {
 		value:   widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 	}
 	t.caption.SizeName = theme.SizeNameCaptionText
-	t.caption.Importance = widget.LowImportance
 	// Three columns leave no room for a larger figure ("Firmware Managed").
 	t.value.Truncation = fyne.TextTruncateEllipsis
 	return t, container.NewVBox(t.caption, t.value)
@@ -75,8 +80,18 @@ type panel struct {
 	sessions *widget.Label
 	badge    *widget.Label
 	offline  *widget.Label
-	pauseBtn *widget.Button
-	resume   *widget.Button
+	pauseBtn *hintButton
+	resume   *hintButton
+	tips     *tipLayer
+
+	// The Folding@home setup card, shown while FAH does not answer. guide
+	// is detected when the panel is built and again on Check Again.
+	setupCard   *widget.Card
+	setupDesc   *widget.Label
+	setupCmdBox *fyne.Container
+	setupLabel  *widget.Label
+	setupCmd    *widget.Label
+	guide       gui.FAHInstallGuide
 
 	engine      *widget.Select
 	engineNote  *widget.Label
@@ -140,8 +155,10 @@ func newPanel(act actions) *panel {
 	p.badge.Importance = widget.WarningImportance
 	p.offline = widget.NewLabel("")
 	p.offline.Wrapping = fyne.TextWrapWord
-	p.pauseBtn = widget.NewButtonWithIcon("Pause Folding", theme.MediaPauseIcon(), func() { p.act.pause() })
-	p.resume = widget.NewButtonWithIcon("Resume Folding", theme.MediaPlayIcon(), func() { p.act.resume() })
+	p.tips = newTipLayer()
+	p.pauseBtn = newHintButton("Pause Folding", theme.MediaPauseIcon(), func() { p.act.pause() })
+	p.resume = newHintButton("Resume Folding", theme.MediaPlayIcon(), func() { p.act.resume() })
+	p.pauseBtn.onHover, p.resume.onHover = p.tips.hover, p.tips.hover
 
 	dotBox := container.NewGridWrap(fyne.NewSize(18, 18), p.dot)
 	header := container.NewVBox(
@@ -151,6 +168,32 @@ func newPanel(act actions) *panel {
 		p.offline,
 		container.NewGridWithColumns(2, p.pauseBtn, p.resume),
 	)
+
+	p.setupDesc = widget.NewLabel("")
+	p.setupDesc.Wrapping = fyne.TextWrapWord
+	download := widget.NewButtonWithIcon("Download Folding@home", theme.DownloadIcon(), func() {
+		p.act.openURL(p.guide.DownloadURL)
+	})
+	download.Importance = widget.HighImportance
+	p.setupLabel = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	p.setupCmd = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
+	p.setupCmd.Wrapping = fyne.TextWrapBreak
+	p.setupCmd.Selectable = true
+	copyCmd := widget.NewButtonWithIcon("Copy Command", theme.ContentCopyIcon(), func() {
+		fyne.CurrentApp().Clipboard().SetContent(p.guide.InstallCommand)
+		p.act.notify("Install command copied to clipboard")
+	})
+	p.setupCmdBox = container.NewVBox(p.setupLabel,
+		container.NewBorder(nil, nil, nil, copyCmd, p.setupCmd))
+	checkAgain := widget.NewButtonWithIcon("Check Again", theme.ViewRefreshIcon(), func() {
+		p.setGuide(p.act.detectFAH())
+		p.act.refresh()
+	})
+	setupBox := container.NewVBox(p.setupDesc, p.setupCmdBox,
+		container.NewHBox(download, checkAgain))
+	p.setupCard = widget.NewCard("Folding@home Setup", "", setupBox)
+	p.setupCard.Hide()
+	p.setGuide(p.act.detectFAH())
 
 	options := []string{engineFAH}
 	for _, e := range boincEngines {
@@ -184,14 +227,13 @@ func newPanel(act actions) *panel {
 	p.projOrg.Wrapping = fyne.TextWrapWord
 	p.projSummary = widget.NewLabel("")
 	p.projSummary.Wrapping = fyne.TextWrapWord
-	p.projSummary.Importance = widget.LowImportance
+	p.projSummary.TextStyle = fyne.TextStyle{Italic: true}
 	p.projBtn = widget.NewButtonWithIcon("View Project Details…", theme.SearchIcon(), func() {
 		if p.projectID > 0 {
 			p.act.openURL(gui.ProjectURL(p.projectID))
 		}
 	})
 	p.projNone = widget.NewLabel("")
-	p.projNone.Importance = widget.LowImportance
 	p.projBox = container.NewVBox(p.projTitle, p.projCause, p.projOrg, p.projSummary,
 		container.NewHBox(p.projBtn))
 	impactBox := container.NewVBox(
@@ -280,7 +322,7 @@ func newPanel(act actions) *panel {
 	boardNote := widget.NewLabel("100% optional. Helps track total community hours and work units donated. " +
 		"Nothing is sent yet: your choice is saved for when the leaderboard opens.")
 	boardNote.Wrapping = fyne.TextWrapWord
-	boardNote.Importance = widget.LowImportance
+	boardNote.SizeName = theme.SizeNameCaptionText
 	boardCard := widget.NewCard("Community Leaderboard (Opt-in)", "",
 		container.NewVBox(p.compute, p.shareCheck, p.aliasEntry, boardNote))
 
@@ -289,9 +331,11 @@ func newPanel(act actions) *panel {
 	p.updated = widget.NewLabel("")
 	statusBar := container.NewBorder(widget.NewSeparator(), nil, nil, p.updated, p.message)
 
-	body := container.NewVBox(header, impactCard, boardCard, gpuCard, p.batteryCard, pauseCard, layout.NewSpacer())
-	p.root = container.NewBorder(nil, statusBar, nil, nil, container.NewPadded(container.NewVScroll(body)))
-	p.boxes = []*fyne.Container{p.projBox, impactBox, ecoRight, p.ecoBox, p.grid, gpuBox, pauseBox, header, body, statusBar}
+	body := container.NewVBox(header, p.setupCard, impactCard, boardCard, gpuCard, p.batteryCard, pauseCard, layout.NewSpacer())
+	p.root = container.NewStack(
+		container.NewBorder(nil, statusBar, nil, nil, container.NewPadded(container.NewVScroll(body))),
+		p.tips.layer)
+	p.boxes = []*fyne.Container{p.setupCmdBox, setupBox, p.projBox, impactBox, ecoRight, p.ecoBox, p.grid, gpuBox, pauseBox, header, body, statusBar}
 	return p
 }
 
@@ -316,8 +360,12 @@ func (p *panel) update(v gui.View) {
 	}
 	show(p.sessions, on && len(s.GameSessions) > 0)
 	p.sessions.SetText("Game sessions: " + strings.Join(s.GameSessions, ", "))
-	enable(p.pauseBtn, on && s.ManualOverride != gui.OverridePause)
-	enable(p.resume, on)
+	p.pauseBtn.setHint(v.PauseHint())
+	p.resume.setHint(v.ResumeHint())
+	p.tips.refresh()
+
+	// Folding@home setup, until the daemon reaches it.
+	show(p.setupCard, v.NeedsFAHSetup())
 
 	// Scientific impact. Without metadata (not fetched yet, or no network)
 	// the card still names the project and links to it.
@@ -423,6 +471,17 @@ func (p *panel) update(v gui.View) {
 		p.updated.SetText("Updated " + s.UpdatedAt.Local().Format("15:04:05"))
 	}
 
+	p.refreshLayout()
+}
+
+// setGuide shows g in the setup card.
+func (p *panel) setGuide(g gui.FAHInstallGuide) {
+	p.guide = g
+	p.setupCard.SetSubTitle(g.Title)
+	p.setupDesc.SetText(g.Description)
+	p.setupLabel.SetText(g.CommandLabel)
+	p.setupCmd.SetText(g.InstallCommand)
+	show(p.setupCmdBox, g.InstallCommand != "")
 	p.refreshLayout()
 }
 

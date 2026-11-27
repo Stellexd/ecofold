@@ -6,17 +6,18 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-18 (thermal incident fixes on `feat/m3-gui`).
+Last updated: 2026-11-20 (macOS hardware checks done).
+
+> **Warning:** EcoFold is not recommended at all on computers without
+> active cooling (fanless laptops such as the MacBook Air). Even with the
+> 1-thread CPU budget and the thermal guard, Folding@home keeps a fanless
+> machine hot for hours. Use it on machines with fans.
 
 ## Next session
 
-0. **macOS thermal incident (2026-11-18): fixed in code, not yet seen live
-   under load.** Single instance, `-pause-fah`, the manual-pause marker, the
-   pause enforcement (INC-3) and the FAH CPU thread budget are implemented and
-   tested with fakes; `SetCPUs` was checked against the real `fah-client`
-   8.5.6 with FAH paused. Next: run the daemon on the M4 Air with FAH folding
-   and watch the temperature with the budget of 1 thread (boxes under
-   section 3). Until then, do not leave FAH folding on the M4 unattended.
+0. **macOS thermal incident (2026-11-18): closed.** The macOS hardware checks
+   are done (2026-11-20). EcoFold is still **not recommended on Macs without
+   active cooling** (see the warning above).
 1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
    while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
    with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
@@ -24,9 +25,31 @@ Last updated: 2026-11-18 (thermal incident fixes on `feat/m3-gui`).
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
    SIGNALIS in the menu shows the layer 2 session hold on hardware.
 2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. M3 is written: the IPC backend is verified on CachyOS and the GUI is
-   implemented (`feat/m3-gui`). Next: try the GUI on both desktops
-   (checklist in section 3), then the security review of the socket.
+3. M3 is written: the IPC backend is verified on CachyOS, the GUI is
+   implemented and the pause list works on macOS. What is left is hardware
+   checks (lists below).
+
+### To close M2 (issue #2)
+
+- [ ] App matrix run on CachyOS (item 1), including mpv/VLC with
+  `hwdec=nvdec`, and calibrate the thresholds from it.
+- [ ] Close issue #2 and tag `v0.0.2`.
+
+### To close M3 (issue #3)
+
+- [ ] Try the GUI on the CachyOS desktop (checklist in section 3).
+- [x] Run the M4 Air with FAH folding on the 1-thread CPU budget and watch
+  the temperature (item 0).
+- [x] macOS pause list on AC: folding resumes 2 minutes after the matching
+  app quits (checked on battery and on AC).
+- [ ] Start the unit without the `ecofold` group: it must start, log
+  `socket group not found` and leave the socket `0600`.
+- [x] Security review of the socket (2026-11-20, focused review with the
+  `security-audit` skill; `SECURITY_AUDIT.md` section 8): no findings.
+
+Not needed to close M3: decide where the config is persisted (eco watts and
+the pause list are lost on restart), harden the systemd unit, and calibrate
+the macOS per-app GPU time (`GPUApps`) under a real Metal game or render.
 
 ## Road to v0.1.0
 
@@ -121,15 +144,27 @@ always stop folding.
 - [x] The `fah` block of the status was what the daemon saw the last time it
   paused or resumed. The loop now reads the FAH status on its first tick and
   every 5 ticks (10 s), so a pause made in FAH's own UI shows by itself.
-- [ ] Pause list on macOS: `set_pause_processes` and `-pause-processes` are
-  refused or ignored there (`unsupported`), because `DarwinCollector` reads
-  ioreg only. It needs a per-process source before it can be supported.
-- [ ] Security review of the socket before merging (new attack surface). The
+- [x] Pause list on macOS (2026-11-18): `DarwinCollector` lists processes with
+  `sysctl kern.proc.all` (no root, no cgo) and resolves 16-byte `p_comm`
+  names through `kern.procargs2`. Checked on the M4 Air with a test daemon
+  and the mock FAH, on battery: `set_pause_processes` matched `safari`,
+  `calculator` and `notificationcenter` (from `NotificationCent`), the mode
+  went to `paused_load` 3 ticks later and back to `paused_battery` on the
+  first tick after Calculator quit.
+  - [x] Seen on AC (2026-11-20): the resume of folding after the 2-minute cooldown
+    once the matching app quits. On battery the battery pause takes over, so
+    the cooldown never shows.
+- [ ] macOS per-app GPU time (`SystemSnapshot.GPUApps`, from `AppUsage` in
+  `ioreg -d 2 -l -c IOAccelerator`): implemented and logged with `-debug`
+  (`msg="gpu apps"`), not used by the evaluator. Calibrate it under a real
+  Metal game or render before any rule reads it; see
+  `internal/detector/README.md` for why it does not go into `GPUProcesses`.
+- [x] Security review of the socket before merging (new attack surface). The
   daemon runs as root, so a socket bug is a root bug: socket `0660` with an
   `ecofold` group, check `SO_PEERCRED`, cap message size, validate watts
-  against the NVML constraints. All four are implemented (NV-1 in
-  `SECURITY_AUDIT.md`); the review itself, with the `security-audit` skill in
-  the `standard` profile, has not been done.
+  against the NVML constraints. Reviewed 2026-11-20 at `be42348`
+  (`SECURITY_AUDIT.md` section 8): no findings, NV-1 resolved in code. It
+  was a focused source review, not the full `standard` workflow.
 - [ ] Harden the unit further (`SystemCallFilter=@system-service`,
   `ProtectKernelModules`, `RestrictNamespaces`, `MemoryDenyWriteExecute`) and
   re-check that NVML and cgo still work on CachyOS.
@@ -161,7 +196,7 @@ always stop folding.
     works, the window's X hides it instead of quitting, and Pause Folding
     turns the icon gray, pauses FAH and restores 145 W.
   - [ ] KDE Plasma: the icon turns blue during a game.
-  - [ ] macOS: the menu bar icon and menu, and the control panel with the
+  - [x] macOS: the menu bar icon and menu, and the control panel with the
     power control hidden and the pause list disabled.
   - [ ] Against the real daemon: resume (also during a game, to see the
     `game_active` message), the eco limit applied while folding and the
@@ -218,7 +253,7 @@ always stop folding.
     in 5–10 s. Profiles `fanless` / `active_laptop` / `desktop` from
     `hw.model` (`internal/detector/darwin_profile.go`); budget applied before
     every resume and restored on exit (`docs/MACOS_TELEMETRY.md`).
-  - [ ] Run the daemon on the M4 Air with FAH folding and confirm it sets
+  - [x] Run the daemon on the M4 Air with FAH folding and confirm it sets
     `cpus` 1 and the CPU stays at or below 70 °C; restart the daemon and
     check the user's value comes back.
   - [ ] Measure the MacBook Pro and desktop budgets (Mac Studio M1 Max is
@@ -256,6 +291,10 @@ always stop folding.
   freezes the FAH container (`docker pause`) and EcoFold cannot reach the
   API.
 - [ ] macOS `.dmg` (telemetry + FAH control only; no TDP on Apple Silicon).
+- [ ] Folding@home v8 is installed separately, never bundled: declare
+  `optdepends=('foldingathome' 'docker')` in the AUR `PKGBUILD` and say so in
+  the `caveats` of the Homebrew tap. The GUI's "Folding@home Setup" card only
+  links to the official download and offers a command to copy.
 - [ ] README with install, permissions and known limitations.
 - [ ] Tag `v0.1.0` on `main` once every box above is ticked.
 

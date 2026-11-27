@@ -14,10 +14,6 @@ build/bin/
 *.out
 coverage.txt
 
-# Dependencias de Frontend (para cuando agreguemos Wails)
-frontend/node_modules/
-frontend/dist/
-
 # Basura de Sistemas Operativos (macOS y Linux)
 .DS_Store
 .AppleDouble
@@ -43,14 +39,14 @@ config.local.json
 # Scripts locales de desarrollo y utilidades de análisis
 scripts/
 
-# Configuración local de Agentes de IA y Skills
+# Configuración local de Agentes de IA
+# .agents/skills/ se versiona; AGENTS.md queda local por ahora y CLAUDE.md es un symlink local a AGENTS.md.
 AGENTS.md
 CLAUDE.md
-.agents/
 .opencode/
 opencode.json
 .skills/
-skills/
+/skills/
 .cursor/
 .cursorrules
 .windsurfrules

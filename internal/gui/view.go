@@ -206,6 +206,45 @@ func (v View) WantsResume() bool {
 	return folding && s.FAH.Reachable && s.FAH.Paused
 }
 
+// PauseHint is why Pause Folding cannot be pressed now, or empty when it can.
+func (v View) PauseHint() string {
+	switch {
+	case !v.Connected:
+		return "Not connected to the daemon."
+	case v.Status.ManualOverride == OverridePause:
+		return "Folding is already paused by you."
+	}
+	return ""
+}
+
+// ResumeHint is why Resume Folding cannot be pressed now, or empty when it
+// can. Resume only makes sense when the user's pause is what keeps FAH
+// stopped (WantsResume); a pause of the daemon's own lifts by itself.
+func (v View) ResumeHint() string {
+	if !v.Connected {
+		return "Not connected to the daemon."
+	}
+	if v.WantsResume() {
+		return ""
+	}
+	s := v.Status
+	switch s.Mode {
+	case ModePausedLoad:
+		return "A game or a heavy GPU app is running. Folding resumes by itself after the cooldown."
+	case ModePausedBattery:
+		return "The battery is too low to fold. Folding resumes when you plug in or the battery allows it."
+	case ModePausedThermal:
+		return "The machine is too hot. Folding resumes by itself once it cools down."
+	}
+	switch {
+	case v.fahUnreachable():
+		return "Folding@home is not reachable. Start the Folding@home client first."
+	case s.FAH.State == FAHStateIdle:
+		return "Folding@home is running and waiting for a work unit."
+	}
+	return "Folding is already running."
+}
+
 // ToggleLabel is the quick action's label.
 func (v View) ToggleLabel() string {
 	if v.WantsResume() {
