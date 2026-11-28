@@ -6,8 +6,8 @@ done. Finished work and its context (M1 review, chaos passes, daemon loop,
 systemd verification, layer 2, compute contention):
 `docs/archive/PENDING_HISTORY.md` and the reports in `docs/`.
 
-Last updated: 2026-11-27 (CachyOS reinstalled; unit without the group
-checked; first-run FAH setup requested).
+Last updated: 2026-11-27 (M3 hardware checks done on the reinstalled
+CachyOS; pause cause and cooldown in the status, PR #35).
 
 > **Warning:** EcoFold is not recommended at all on computers without
 > active cooling (fanless laptops such as the MacBook Air). Even with the
@@ -16,19 +16,37 @@ checked; first-run FAH setup requested).
 
 ## Next session
 
-0. **macOS thermal incident (2026-11-18): closed.** The macOS hardware checks
-   are done (2026-11-20). EcoFold is still **not recommended on Macs without
-   active cooling** (see the warning above).
-1. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
+State at the end of 2026-11-27: `develop` at `c3a451f` (PR #35 merged).
+CachyOS runs the daemon built from that code under systemd, FAH v8 folds on
+the GPU in Docker (loopback only), and the GUI was started by hand. The
+CachyOS checkout is detached at the old `mac/fix/gui-pause-list-label`; run
+`git checkout develop && git pull` there first.
+
+1. **Close M3 (issue #3).** Every box under "To close M3" is ticked. Close the
+   issue and tag `v0.0.3`. Decide first whether milestone tags go on
+   `develop` or on `main` after merging `develop` (the `v0.1.0` note says
+   `main`); ask before tagging or merging to `main`.
+2. **Rebuild the calibration sampler on CachyOS.** The reinstall lost
+   `~/.cache/ecofold-verify` (the test-only `TestCalibrate` that logged every
+   GPU process, its SM, VRAM, ignore/session flags and the decision every
+   2 s to `~/ecofold-calibration.csv`). Rewrite it, this time kept in the
+   repo behind a build tag (for example `calibrate`) so it is not lost again.
+3. **App matrix run on CachyOS (closes M2).** Use each app for about 2 minutes
    while the sampler runs: Discord (GIFs or a call), GitHub Desktop, LibreWolf
    with a 1080p/4K video, mpv/VLC (also with `hwdec=nvdec`), Heroic or Lutris
    idle, Wallpaper Engine, PCSX2, and Crimson Desert, Path of Exile 2, The
    Witcher 3 and Factorio (2 min in game, 1 min in the menu). Nine Sols or
-   SIGNALIS in the menu shows the layer 2 session hold on hardware.
-2. Close issue #2 and tag `v0.0.2` after the matrix run.
-3. M3 is written: the IPC backend is verified on CachyOS, the GUI is
-   implemented and the pause list works on macOS. What is left is hardware
-   checks (lists below).
+   SIGNALIS in the menu shows the layer 2 session hold on hardware. With
+   `load_cause` in the status, also check that each pause names the right
+   cause (`game` vs `gpu_load` vs `compute`). Then calibrate the thresholds,
+   close issue #2 and tag `v0.0.2`.
+4. **Decide the first-run Folding@home setup** (section 5 below): start
+   folding without manual steps, GPU-only by default on Linux, automatic
+   install. Create `docs/DECISIONES.md` (it does not exist yet) and record
+   the decision there. Before automating the CPU setting, find out why the
+   daemon still read `cpus: 11` after the web app set the CPU to 0.
+5. **Then M4** (CI, packaging, release; section 4). `docs/ROADMAP.md` is out
+   of date (it still lists the socket review as open); refresh it then.
 
 ### To close M2 (issue #2)
 
